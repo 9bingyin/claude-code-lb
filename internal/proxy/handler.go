@@ -9,6 +9,7 @@ import (
 	"claude-code-lb/internal/balance"
 	"claude-code-lb/internal/logger"
 	"claude-code-lb/internal/stats"
+	"claude-code-lb/pkg/types"
 
 	"github.com/gin-gonic/gin"
 )
@@ -33,120 +34,152 @@ func Handler(balancer *balance.Balancer, statsReporter *stats.Reporter) gin.Hand
 		startTime := time.Now()
 		statsReporter.IncrementRequestCount()
 
-		server, err := balancer.GetNextServer()
-		if err != nil {
-			logger.Error("PROXY", "No available servers: %v", err)
-			c.JSON(503, gin.H{"error": err.Error()})
-			return
+		// 实现请求级重试
+		maxRetries := 3 // 最大重试次数
+		var lastErr error
+		triedServers := make(map[string]bool) // 记录已尝试的服务器
+		
+		for attempt := 0; attempt < maxRetries; attempt++ {
+			// 第一次尝试正常流程，之后尝试 fallback
+			useFallback := attempt > 0
+			server, err := balancer.GetNextServerWithFallback(useFallback)
+			if err != nil {
+				lastErr = err
+				if attempt == maxRetries-1 {
+					logger.Error("PROXY", "All retry attempts failed: %v", err)
+					c.JSON(503, gin.H{"error": "All servers unavailable", "details": err.Error()})
+					return
+				}
+				continue
+			}
+			
+			// 检查是否已经尝试过这个服务器
+			if triedServers[server.URL] {
+				continue // 跳过已尝试的服务器
+			}
+			triedServers[server.URL] = true
+
+			// 尝试请求当前服务器
+			if success := tryRequest(c, server, balancer, statsReporter, startTime, attempt); success {
+				return // 请求成功，结束
+			}
+			
+			// 请求失败，记录错误并继续重试
+			statsReporter.IncrementErrorCount()
 		}
+		
+		// 所有重试都失败
+		logger.Error("PROXY", "All retries exhausted, last error: %v", lastErr)
+		c.JSON(502, gin.H{"error": "All servers failed after retries"})
+	}
+}
 
-		target := server.URL + c.Request.URL.Path
-		if c.Request.URL.RawQuery != "" {
-			target += "?" + c.Request.URL.RawQuery
-		}
+// tryRequest 尝试对指定服务器发起请求
+func tryRequest(c *gin.Context, server *types.UpstreamServer, balancer *balance.Balancer, statsReporter *stats.Reporter, startTime time.Time, attempt int) bool {
+	target := server.URL + c.Request.URL.Path
+	if c.Request.URL.RawQuery != "" {
+		target += "?" + c.Request.URL.RawQuery
+	}
 
-		// 移除双斜杠
-		target = strings.ReplaceAll(target, "//", "/")
-		// 但保留协议的 ://
-		target = strings.Replace(target, "http:/", "http://", 1)
-		target = strings.Replace(target, "https:/", "https://", 1)
+	// 移除双斜杠
+	target = strings.ReplaceAll(target, "//", "/")
+	// 但保留协议的 ://
+	target = strings.Replace(target, "http:/", "http://", 1)
+	target = strings.Replace(target, "https:/", "https://", 1)
 
-		// 请求日志 - 显示完整URL
-		fullRequestURL := formatRequestURL(c.Request.Method, server.URL, c.Request.URL.Path, c.Request.URL.RawQuery)
+	// 请求日志 - 显示完整URL
+	fullRequestURL := formatRequestURL(c.Request.Method, server.URL, c.Request.URL.Path, c.Request.URL.RawQuery)
+	if attempt > 0 {
+		logger.Info("PROXY", "Retry %d: %s", attempt, fullRequestURL)
+	} else {
 		logger.Info("PROXY", "%s", fullRequestURL)
+	}
 
-		client := &http.Client{
-			Timeout: 60 * time.Second,
-		}
+	client := &http.Client{
+		Timeout: 60 * time.Second,
+	}
 
-		req, err := http.NewRequest(c.Request.Method, target, c.Request.Body)
-		if err != nil {
-			logger.Error("PROXY", "Failed to create request: %v", err)
-			c.JSON(500, gin.H{"error": "Failed to create request"})
-			return
-		}
+	req, err := http.NewRequest(c.Request.Method, target, c.Request.Body)
+	if err != nil {
+		logger.Error("PROXY", "Failed to create request: %v", err)
+		return false
+	}
 
-		for key, values := range c.Request.Header {
-			if strings.ToLower(key) == "authorization" {
-				req.Header.Set(key, "Bearer "+server.Token)
-			} else if strings.ToLower(key) != "host" {
-				for _, value := range values {
-					req.Header.Add(key, value)
-				}
-			}
-		}
-
-		resp, err := client.Do(req)
-		if err != nil {
-			logger.Error("PROXY", "Request failed: %s | Error: %v", fullRequestURL, err)
-			balancer.MarkServerDown(server.URL)
-			statsReporter.IncrementErrorCount()
-
-			// 移除递归调用，直接返回错误
-			c.JSON(502, gin.H{"error": "Upstream server failed", "details": err.Error()})
-			return
-		}
-		defer resp.Body.Close()
-
-		// 检查响应状态，如果是5xx错误或429速率限制，标记服务器为不可用
-		if resp.StatusCode >= 500 || resp.StatusCode == 429 {
-			if resp.StatusCode == 429 {
-				logger.Warning("PROXY", "Rate limited: %s | Status: %d", fullRequestURL, resp.StatusCode)
-			} else {
-				logger.Error("PROXY", "Server error: %s | Status: %d", fullRequestURL, resp.StatusCode)
-			}
-			balancer.MarkServerDown(server.URL)
-			statsReporter.IncrementErrorCount()
-
-			// 不再递归调用，直接返回错误响应
-			if resp.StatusCode == 429 {
-				c.JSON(429, gin.H{"error": "Rate limit exceeded", "status": resp.StatusCode})
-			} else {
-				c.JSON(502, gin.H{"error": "Upstream server error", "status": resp.StatusCode})
-			}
-			return
-		}
-
-		// 记录响应时间和统计
-		responseTime := time.Since(startTime)
-		statsReporter.AddResponseTime(responseTime.Milliseconds())
-		statsReporter.AddServerStats(server.URL, responseTime.Milliseconds())
-
-		// 记录响应日志
-		if resp.StatusCode == 200 {
-			logger.Success("PROXY", "Success: %s | Status: %d (%dms)", fullRequestURL, resp.StatusCode, responseTime.Milliseconds())
-		} else if resp.StatusCode < 400 {
-			logger.Info("PROXY", "Response: %s | Status: %d (%dms)", fullRequestURL, resp.StatusCode, responseTime.Milliseconds())
-		} else {
-			logger.Warning("PROXY", "Client error: %s | Status: %d (%dms)", fullRequestURL, resp.StatusCode, responseTime.Milliseconds())
-		}
-
-		for key, values := range resp.Header {
+	for key, values := range c.Request.Header {
+		if strings.ToLower(key) == "authorization" {
+			req.Header.Set(key, "Bearer "+server.Token)
+		} else if strings.ToLower(key) != "host" {
 			for _, value := range values {
-				c.Header(key, value)
+				req.Header.Add(key, value)
 			}
-		}
-
-		c.Status(resp.StatusCode)
-
-		if strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
-			c.Header("Content-Type", "text/event-stream")
-			c.Header("Cache-Control", "no-cache")
-			c.Header("Connection", "keep-alive")
-
-			buffer := make([]byte, 1024)
-			for {
-				n, err := resp.Body.Read(buffer)
-				if n > 0 {
-					c.Writer.Write(buffer[:n])
-					c.Writer.Flush()
-				}
-				if err != nil {
-					break
-				}
-			}
-		} else {
-			c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 		}
 	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Error("PROXY", "Request failed: %s | Error: %v", fullRequestURL, err)
+		balancer.MarkServerDown(server.URL)
+		return false
+	}
+	defer resp.Body.Close()
+
+	// 检查响应状态，如果是5xx错误或429速率限制，标记服务器为不可用
+	if resp.StatusCode >= 500 || resp.StatusCode == 429 {
+		if resp.StatusCode == 429 {
+			logger.Warning("PROXY", "Rate limited: %s | Status: %d", fullRequestURL, resp.StatusCode)
+		} else {
+			logger.Error("PROXY", "Server error: %s | Status: %d", fullRequestURL, resp.StatusCode)
+		}
+		balancer.MarkServerDown(server.URL)
+		return false
+	}
+
+	// 记录响应时间和统计
+	responseTime := time.Since(startTime)
+	statsReporter.AddResponseTime(responseTime.Milliseconds())
+	statsReporter.AddServerStats(server.URL, responseTime.Milliseconds())
+	
+	// 标记服务器为健康（重置失败计数）
+	balancer.MarkServerHealthy(server.URL)
+
+	// 记录响应日志
+	if resp.StatusCode == 200 {
+		logger.Success("PROXY", "Success: %s | Status: %d (%dms)", fullRequestURL, resp.StatusCode, responseTime.Milliseconds())
+	} else if resp.StatusCode < 400 {
+		logger.Info("PROXY", "Response: %s | Status: %d (%dms)", fullRequestURL, resp.StatusCode, responseTime.Milliseconds())
+	} else {
+		logger.Warning("PROXY", "Client error: %s | Status: %d (%dms)", fullRequestURL, resp.StatusCode, responseTime.Milliseconds())
+	}
+
+	// 复制响应头
+	for key, values := range resp.Header {
+		for _, value := range values {
+			c.Header(key, value)
+		}
+	}
+
+	c.Status(resp.StatusCode)
+
+	// 处理流式响应
+	if strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+
+		buffer := make([]byte, 1024)
+		for {
+			n, err := resp.Body.Read(buffer)
+			if n > 0 {
+				c.Writer.Write(buffer[:n])
+				c.Writer.Flush()
+			}
+			if err != nil {
+				break
+			}
+		}
+	} else {
+		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
+	}
+
+	return true // 请求成功
 }
