@@ -31,10 +31,5 @@
   },
   "circuit_breaker": {
     "cooldown_seconds": 60
-  },
-  "health_check": {
-    "enabled": true,
-    "interval": 30,
-    "timeout": 5
   }
 }
