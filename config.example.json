@@ -21,6 +21,14 @@
     ]
   },
   "fallback": true,
+  "auth": {
+    "enabled": true,
+    "allowed_keys": [
+      "sk-your-client-api-key-1",
+      "sk-your-client-api-key-2",
+      "sk-your-client-api-key-3"
+    ]
+  },
   "circuit_breaker": {
     "cooldown_seconds": 60
   },

@@ -30,6 +30,10 @@ type Config struct {
 	Port         string        `json:"port"`
 	LoadBalancer LoadBalancer `json:"load_balancer"`
 	Fallback     bool          `json:"fallback"`
+	Auth         struct {
+		Enabled      bool     `json:"enabled"`       // 是否启用鉴权
+		AllowedKeys  []string `json:"allowed_keys"`  // 允许的 API Key 列表
+	} `json:"auth"`
 	CircuitBreaker struct {
 		CooldownSeconds int `json:"cooldown_seconds"` // 标记为down后的冷却时间
 	} `json:"circuit_breaker"`
@@ -95,6 +99,73 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// 鉴权中间件
+func authMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 如果未启用鉴权，直接通过
+		if !config.Auth.Enabled {
+			c.Next()
+			return
+		}
+
+		// 检查 Authorization header
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.JSON(401, gin.H{"error": "Missing Authorization header"})
+			c.Abort()
+			return
+		}
+
+		// 提取 Bearer token
+		const bearerPrefix = "Bearer "
+		if !strings.HasPrefix(authHeader, bearerPrefix) {
+			c.JSON(401, gin.H{"error": "Invalid Authorization header format"})
+			c.Abort()
+			return
+		}
+
+		token := authHeader[len(bearerPrefix):]
+		
+		// 检查 token 是否在允许的列表中
+		isValidToken := false
+		for _, allowedKey := range config.Auth.AllowedKeys {
+			if token == allowedKey {
+				isValidToken = true
+				break
+			}
+		}
+
+		if !isValidToken {
+			log.Printf("Unauthorized access attempt with token: %s...%s", 
+				token[:min(10, len(token))], 
+				token[max(0, len(token)-10):])
+			c.JSON(401, gin.H{"error": "Invalid API key"})
+			c.Abort()
+			return
+		}
+
+		log.Printf("Authorized access with token: %s...%s", 
+			token[:min(10, len(token))], 
+			token[max(0, len(token)-10):])
+		c.Next()
+	}
+}
+
+// 辅助函数
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func getNextServer() (*UpstreamServer, error) {
@@ -420,7 +491,9 @@ func main() {
 	r.SetTrustedProxies([]string{})
 
 	r.GET("/health", healthHandler)
-	r.Any("/v1/*path", proxyHandler)
+	
+	// 在需要鉴权的路由上应用鉴权中间件
+	r.Any("/v1/*path", authMiddleware(), proxyHandler)
 
 	// 启动健康检查
 	if config.HealthCheck.Enabled {
@@ -438,5 +511,9 @@ func main() {
 	fmt.Printf("Fallback enabled: %t\n", config.Fallback)
 	fmt.Printf("Health check enabled: %t\n", config.HealthCheck.Enabled)
 	fmt.Printf("Circuit breaker cooldown: %d seconds\n", config.CircuitBreaker.CooldownSeconds)
+	fmt.Printf("Authentication enabled: %t\n", config.Auth.Enabled)
+	if config.Auth.Enabled {
+		fmt.Printf("Allowed API keys: %d\n", len(config.Auth.AllowedKeys))
+	}
 	log.Fatal(r.Run(":" + port))
 }
