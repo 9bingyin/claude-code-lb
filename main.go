@@ -104,8 +104,10 @@ func getNextServer() (*UpstreamServer, error) {
 	availableServers := getAvailableServers()
 	if len(availableServers) == 0 {
 		if config.Fallback {
-			// 如果启用fallback，尝试所有服务器
-			availableServers = config.LoadBalancer.Servers
+			// 如果启用fallback但所有服务器都在冷却中，返回错误而不是重试
+			// 这样可以避免无限循环请求冷却中的服务器
+			log.Println("All servers are down or cooling down, returning error")
+			return nil, errors.New("all servers are down or cooling down")
 		} else {
 			return nil, errors.New("no available servers")
 		}
@@ -130,10 +132,23 @@ func getAvailableServers() []UpstreamServer {
 	
 	for _, server := range config.LoadBalancer.Servers {
 		// 检查服务器状态和冷却时间
-		if serverStatus[server.URL] && now.After(server.DownUntil) {
+		isUp := serverStatus[server.URL]
+		notCoolingDown := now.After(server.DownUntil)
+		
+		// 添加调试日志
+		if !isUp {
+			log.Printf("Server %s is marked down", server.URL)
+		}
+		if !notCoolingDown {
+			log.Printf("Server %s is cooling down until %s", server.URL, server.DownUntil.Format("15:04:05"))
+		}
+		
+		if isUp && notCoolingDown {
 			available = append(available, server)
 		}
 	}
+	
+	log.Printf("Available servers: %d/%d", len(available), len(config.LoadBalancer.Servers))
 	return available
 }
 
@@ -226,7 +241,8 @@ func markServerUp(url string) {
 func proxyHandler(c *gin.Context) {
 	server, err := getNextServer()
 	if err != nil {
-		c.JSON(503, gin.H{"error": "No available servers"})
+		log.Printf("No available servers: %v", err)
+		c.JSON(503, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -260,13 +276,8 @@ func proxyHandler(c *gin.Context) {
 		log.Printf("Request to %s failed: %v", server.URL, err)
 		markServerDown(server.URL)
 		
-		if config.Fallback {
-			// 尝试下一个服务器
-			proxyHandler(c)
-			return
-		}
-		
-		c.JSON(500, gin.H{"error": "Failed to forward request"})
+		// 移除递归调用，直接返回错误
+		c.JSON(502, gin.H{"error": "Upstream server failed", "details": err.Error()})
 		return
 	}
 	defer resp.Body.Close()
@@ -276,11 +287,9 @@ func proxyHandler(c *gin.Context) {
 		log.Printf("Server %s returned %d, marking as down", server.URL, resp.StatusCode)
 		markServerDown(server.URL)
 		
-		if config.Fallback {
-			// 尝试下一个服务器
-			proxyHandler(c)
-			return
-		}
+		// 不再递归调用，直接返回错误响应
+		c.JSON(502, gin.H{"error": "Upstream server error", "status": resp.StatusCode})
+		return
 	}
 
 	for key, values := range resp.Header {
