@@ -1,4 +1,4 @@
-module claude-code-proxy
+module claude-code-lb
 
 go 1.21
 
