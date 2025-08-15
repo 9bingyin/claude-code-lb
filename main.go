@@ -250,6 +250,18 @@ func proxyHandler(c *gin.Context) {
 	if c.Request.URL.RawQuery != "" {
 		target += "?" + c.Request.URL.RawQuery
 	}
+	
+	// 移除双斜杠
+	target = strings.ReplaceAll(target, "//", "/")
+	// 但保留协议的 ://
+	target = strings.Replace(target, "http:/", "http://", 1)
+	target = strings.Replace(target, "https:/", "https://", 1)
+
+	// 添加详细的请求日志
+	log.Printf("Proxying request to: %s", target)
+	log.Printf("Request method: %s", c.Request.Method)
+	log.Printf("Request path: %s", c.Request.URL.Path)
+	log.Printf("Request query: %s", c.Request.URL.RawQuery)
 
 	client := &http.Client{
 		Timeout: 60 * time.Second,
@@ -264,6 +276,7 @@ func proxyHandler(c *gin.Context) {
 	for key, values := range c.Request.Header {
 		if strings.ToLower(key) == "authorization" {
 			req.Header.Set(key, "Bearer "+server.Token)
+			log.Printf("Using token: %s...%s", server.Token[:10], server.Token[len(server.Token)-10:])
 		} else if strings.ToLower(key) != "host" {
 			for _, value := range values {
 				req.Header.Add(key, value)
@@ -281,6 +294,8 @@ func proxyHandler(c *gin.Context) {
 		return
 	}
 	defer resp.Body.Close()
+
+	log.Printf("Response status: %d from %s", resp.StatusCode, server.URL)
 
 	// 检查响应状态，如果是5xx错误，标记服务器为不可用
 	if resp.StatusCode >= 500 {
@@ -360,11 +375,33 @@ func healthCheck() {
 					Timeout: time.Duration(config.HealthCheck.Timeout) * time.Second,
 				}
 
-				resp, err := client.Get(serverURL + "/health")
-				if err != nil || resp.StatusCode != 200 {
+				// 不同的健康检查策略
+				// 1. 如果是标准的 anthropic API，检查根路径
+				// 2. 如果是自定义路径，跳过健康检查或使用简单的 HEAD 请求
+				var healthURL string
+				if strings.Contains(serverURL, "api.anthropic.com") {
+					healthURL = serverURL
+				} else if strings.Contains(serverURL, "/api/v1/ai/") {
+					// 对于自定义路径，暂时标记为可用，不进行健康检查
+					markServerUp(serverURL)
+					return
+				} else {
+					healthURL = serverURL
+				}
+
+				resp, err := client.Get(healthURL)
+				if err != nil {
+					log.Printf("Health check failed for %s: %v", serverURL, err)
 					markServerDown(serverURL)
 				} else {
-					markServerUp(serverURL)
+					// 对于大多数 API 服务，即使返回 4xx 也说明服务是可用的
+					// 只有网络错误或 5xx 错误才认为服务不可用
+					if resp.StatusCode >= 500 {
+						log.Printf("Health check failed for %s: status %d", serverURL, resp.StatusCode)
+						markServerDown(serverURL)
+					} else {
+						markServerUp(serverURL)
+					}
 				}
 				if resp != nil {
 					resp.Body.Close()
