@@ -31,7 +31,7 @@ func New(config types.Config) *Balancer {
 	}
 
 	// 初始化服务器状态和权重
-	for _, server := range config.LoadBalancer.Servers {
+	for _, server := range config.Servers {
 		b.serverStatus[server.URL] = true
 		weight := server.Weight
 		if weight <= 0 {
@@ -66,11 +66,11 @@ func (b *Balancer) GetNextServerWithFallback(useFallback bool) (*types.UpstreamS
 			return fallbackServer, nil
 		}
 		
-		logger.Error("BALANCE", "All %d servers are down, no fallback available", len(b.config.LoadBalancer.Servers))
+		logger.Error("BALANCE", "All %d servers are down, no fallback available", len(b.config.Servers))
 		return nil, errors.New("all servers are down")
 	}
 
-	switch b.config.LoadBalancer.Type {
+	switch b.config.Algorithm {
 	case "weighted_round_robin":
 		return b.getWeightedServer(availableServers), nil
 	case "random":
@@ -88,7 +88,7 @@ func (b *Balancer) getAvailableServers() []types.UpstreamServer {
 	var down, cooling int
 	now := time.Now()
 
-	for _, server := range b.config.LoadBalancer.Servers {
+	for _, server := range b.config.Servers {
 		// 检查服务器状态和冷却时间
 		isUp := b.serverStatus[server.URL]
 		notCoolingDown := now.After(server.DownUntil)
@@ -192,17 +192,17 @@ func (b *Balancer) getFallbackServer() *types.UpstreamServer {
 	var bestServer *types.UpstreamServer
 	var shortestCooldown time.Duration = time.Hour * 24 // 初始化为很大的值
 	
-	for i, server := range b.config.LoadBalancer.Servers {
+	for i, server := range b.config.Servers {
 		if now.After(server.DownUntil) {
 			// 如果已经过了冷却时间，优先选择
-			return &b.config.LoadBalancer.Servers[i]
+			return &b.config.Servers[i]
 		}
 		
 		// 找到冷却时间最短的服务器
 		cooldownRemaining := server.DownUntil.Sub(now)
 		if cooldownRemaining < shortestCooldown {
 			shortestCooldown = cooldownRemaining
-			bestServer = &b.config.LoadBalancer.Servers[i]
+			bestServer = &b.config.Servers[i]
 		}
 	}
 	
@@ -220,7 +220,7 @@ func (b *Balancer) MarkServerDown(url string) {
 	failures := b.failureCount[url]
 
 	// 动态计算冷却时间（指数退避）
-	baseCooldown := time.Duration(b.config.CircuitBreaker.CooldownSeconds) * time.Second
+	baseCooldown := time.Duration(b.config.Cooldown) * time.Second
 	dynamicCooldown := baseCooldown
 	if failures > 1 {
 		// 指数退避：2^(failures-1) * baseCooldown，最多 10 分钟
@@ -237,9 +237,9 @@ func (b *Balancer) MarkServerDown(url string) {
 	downUntil := time.Now().Add(dynamicCooldown)
 
 	// 更新对应服务器的冷却时间
-	for i, server := range b.config.LoadBalancer.Servers {
+	for i, server := range b.config.Servers {
 		if server.URL == url {
-			b.config.LoadBalancer.Servers[i].DownUntil = downUntil
+			b.config.Servers[i].DownUntil = downUntil
 			break
 		}
 	}
@@ -269,9 +269,9 @@ func (b *Balancer) RecoverServer(url string) {
 	b.serverStatus[url] = true
 	
 	// 清除冷却时间
-	for i, server := range b.config.LoadBalancer.Servers {
+	for i, server := range b.config.Servers {
 		if server.URL == url {
-			b.config.LoadBalancer.Servers[i].DownUntil = time.Time{}
+			b.config.Servers[i].DownUntil = time.Time{}
 			break
 		}
 	}
@@ -295,9 +295,9 @@ func (b *Balancer) MarkServerHealthy(url string) {
 	if !b.serverStatus[url] {
 		b.serverStatus[url] = true
 		// 清除冷却时间
-		for i, server := range b.config.LoadBalancer.Servers {
+		for i, server := range b.config.Servers {
 			if server.URL == url {
-				b.config.LoadBalancer.Servers[i].DownUntil = time.Time{}
+				b.config.Servers[i].DownUntil = time.Time{}
 				break
 			}
 		}

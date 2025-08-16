@@ -1,35 +1,29 @@
 {
   "port": "3000",
-  "load_balancer": {
-    "type": "round_robin",
-    "servers": [
-      {
-        "url": "https://api.anthropic.com",
-        "weight": 5,
-        "token": "sk-your-primary-token-here"
-      },
-      {
-        "url": "https://api.packycode.com",
-        "weight": 3,
-        "token": "sk-your-secondary-token-here"
-      },
-      {
-        "url": "https://api.example.com",
-        "weight": 2,
-        "token": "sk-your-backup-token-here"
-      }
-    ]
-  },
+  "algorithm": "round_robin",
+  "servers": [
+    {
+      "url": "https://api.anthropic.com",
+      "weight": 5,
+      "token": "sk-your-primary-token-here"
+    },
+    {
+      "url": "https://api.packycode.com",
+      "weight": 3,
+      "token": "sk-your-secondary-token-here"
+    },
+    {
+      "url": "https://api.example.com",
+      "weight": 2,
+      "token": "sk-your-backup-token-here"
+    }
+  ],
   "fallback": true,
-  "auth": {
-    "enabled": true,
-    "allowed_keys": [
-      "sk-your-client-api-key-1",
-      "sk-your-client-api-key-2",
-      "sk-your-client-api-key-3"
-    ]
-  },
-  "circuit_breaker": {
-    "cooldown_seconds": 60
-  }
+  "auth": true,
+  "auth_keys": [
+    "sk-your-client-api-key-1",
+    "sk-your-client-api-key-2",
+    "sk-your-client-api-key-3"
+  ],
+  "cooldown": 60
 }

@@ -9,20 +9,13 @@ type UpstreamServer struct {
 	DownUntil time.Time `json:"-"` // 不可用直到这个时间
 }
 
-type LoadBalancer struct {
-	Type    string           `json:"type"` // "round_robin", "weighted_round_robin", "random"
-	Servers []UpstreamServer `json:"servers"`
-}
-
+// 配置结构
 type Config struct {
-	Port         string       `json:"port"`
-	LoadBalancer LoadBalancer `json:"load_balancer"`
-	Fallback     bool         `json:"fallback"`
-	Auth         struct {
-		Enabled     bool     `json:"enabled"`      // 是否启用鉴权
-		AllowedKeys []string `json:"allowed_keys"` // 允许的 API Key 列表
-	} `json:"auth"`
-	CircuitBreaker struct {
-		CooldownSeconds int `json:"cooldown_seconds"` // 标记为down后的冷却时间
-	} `json:"circuit_breaker"`
+	Port      string           `json:"port"`
+	Algorithm string           `json:"algorithm"`   // "round_robin", "weighted_round_robin", "random"
+	Servers   []UpstreamServer `json:"servers"`
+	Fallback  bool             `json:"fallback"`
+	Auth      bool             `json:"auth"`        // 是否启用鉴权
+	AuthKeys  []string         `json:"auth_keys"`   // 允许的 API Key 列表
+	Cooldown  int              `json:"cooldown"`    // 冷却时间（秒）
 }

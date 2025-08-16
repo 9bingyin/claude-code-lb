@@ -29,7 +29,7 @@ func max(a, b int) int {
 func Middleware(config types.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 如果未启用鉴权，直接通过
-		if !config.Auth.Enabled {
+		if !config.Auth {
 			c.Next()
 			return
 		}
@@ -55,7 +55,7 @@ func Middleware(config types.Config) gin.HandlerFunc {
 		token := authHeader[len(bearerPrefix):]
 
 		// 检查 token 是否在允许的列表中
-		if !slices.Contains(config.Auth.AllowedKeys, token) {
+		if !slices.Contains(config.AuthKeys, token) {
 			logger.Auth(false, "Invalid API key %s...%s from %s",
 				token[:min(8, len(token))],
 				token[max(0, len(token)-8):],

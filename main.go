@@ -61,12 +61,12 @@ func main() {
 
 	log.Printf("%s==================== Claude Code Proxy ====================%s", logger.ColorBold, logger.ColorReset)
 	logger.Info("STARTUP", "Starting server on port %s", port)
-	logger.Info("STARTUP", "Load balancer: %s (%d servers)", cfg.LoadBalancer.Type, len(cfg.LoadBalancer.Servers))
-	logger.Info("STARTUP", "Fallback: %t | Circuit breaker: %ds", cfg.Fallback, cfg.CircuitBreaker.CooldownSeconds)
+	logger.Info("STARTUP", "Load balancer: %s (%d servers)", cfg.Algorithm, len(cfg.Servers))
+	logger.Info("STARTUP", "Fallback: %t | Circuit breaker: %ds", cfg.Fallback, cfg.Cooldown)
 	logger.Info("STARTUP", "Health check: passive (auto-recovery after cooldown)")
-	logger.Info("STARTUP", "Authentication: %t", cfg.Auth.Enabled)
-	if cfg.Auth.Enabled {
-		logger.Info("STARTUP", "  Allowed keys: %d", len(cfg.Auth.AllowedKeys))
+	logger.Info("STARTUP", "Authentication: %t", cfg.Auth)
+	if cfg.Auth {
+		logger.Info("STARTUP", "  Allowed keys: %d", len(cfg.AuthKeys))
 	}
 	log.Printf("%s==========================================================%s", logger.ColorBold, logger.ColorReset)
 	log.Fatal(r.Run(":" + port))

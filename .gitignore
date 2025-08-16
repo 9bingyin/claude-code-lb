@@ -1,4 +1,6 @@
 .claude/
+.crush/
+CRUSH.md
 
 config.json
 claude-proxy

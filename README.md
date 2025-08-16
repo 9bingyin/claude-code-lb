@@ -32,27 +32,22 @@ cp config.example.json config.json
 ```json
 {
   "port": "3000",
-  "load_balancer": {
-    "type": "weighted_round_robin",
-    "servers": [
-      {
-        "url": "https://api.anthropic.com",
-        "weight": 5,
-        "token": "sk-your-primary-token"
-      },
-      {
-        "url": "https://api.backup.com",
-        "weight": 3,
-        "token": "sk-your-backup-token"
-      }
-    ]
-  },
+  "algorithm": "weighted_round_robin",
+  "servers": [
+    {
+      "url": "https://api.anthropic.com",
+      "weight": 5,
+      "token": "sk-your-primary-token"
+    },
+    {
+      "url": "https://api.backup.com",
+      "weight": 3,
+      "token": "sk-your-backup-token"
+    }
+  ],
   "fallback": true,
-  "health_check": {
-    "enabled": true,
-    "interval": 30,
-    "timeout": 5
-  }
+  "auth": false,
+  "cooldown": 60
 }
 ```
 
@@ -85,10 +80,8 @@ export ANTHROPIC_API_URL="http://localhost:3000"
 
 ```json
 {
-  "load_balancer": {
-    "type": "round_robin",
-    "servers": [...]
-  }
+  "algorithm": "round_robin",
+  "servers": [...]
 }
 ```
 
@@ -114,19 +107,13 @@ export ANTHROPIC_API_URL="http://localhost:3000"
 
 ### 健康检查配置
 
+健康检查现在是内置功能，通过 `cooldown` 参数配置冷却时间（秒）：
+
 ```json
 {
-  "health_check": {
-    "enabled": true,
-    "interval": 30,
-    "timeout": 5
-  }
+  "cooldown": 60
 }
 ```
-
-- **enabled**: 是否启用健康检查
-- **interval**: 检查间隔（秒）
-- **timeout**: 检查超时时间（秒）
 
 ## API 端点
 
@@ -191,13 +178,11 @@ export CONFIG_FILE="/path/to/your/config.json"
 ### 场景 1: 主备模式
 ```json
 {
-  "load_balancer": {
-    "type": "weighted_round_robin",
-    "servers": [
-      {"url": "https://primary.com", "weight": 10, "token": "primary-token"},
-      {"url": "https://backup.com", "weight": 1, "token": "backup-token"}
-    ]
-  },
+  "algorithm": "weighted_round_robin",
+  "servers": [
+    {"url": "https://primary.com", "weight": 10, "token": "primary-token"},
+    {"url": "https://backup.com", "weight": 1, "token": "backup-token"}
+  ],
   "fallback": true
 }
 ```
@@ -205,14 +190,12 @@ export CONFIG_FILE="/path/to/your/config.json"
 ### 场景 2: 多服务器均衡
 ```json
 {
-  "load_balancer": {
-    "type": "round_robin",
-    "servers": [
-      {"url": "https://server1.com", "token": "token1"},
-      {"url": "https://server2.com", "token": "token2"},
-      {"url": "https://server3.com", "token": "token3"}
-    ]
-  }
+  "algorithm": "round_robin",
+  "servers": [
+    {"url": "https://server1.com", "token": "token1"},
+    {"url": "https://server2.com", "token": "token2"},
+    {"url": "https://server3.com", "token": "token3"}
+  ]
 }
 ```
 
