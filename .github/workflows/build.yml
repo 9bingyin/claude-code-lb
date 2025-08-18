@@ -6,21 +6,6 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
-    inputs:
-      platforms:
-        description: 'Platforms to build'
-        required: false
-        default: 'all'
-        type: choice
-        options:
-          - all
-          - linux-only
-          - darwin-only
-      debug:
-        description: 'Enable debug mode'
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -81,9 +66,6 @@ jobs:
             goarch: arm64
             name: claude-code-lb-darwin-arm64
             platform: darwin
-        exclude:
-          - ${{ inputs.platforms == 'linux-only' && matrix.platform == 'darwin' }}
-          - ${{ inputs.platforms == 'darwin-only' && matrix.platform == 'linux' }}
 
     steps:
       - name: Checkout code
@@ -98,15 +80,6 @@ jobs:
       - name: Get version
         id: version
         run: echo "version=${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
-
-      - name: Debug info
-        if: ${{ inputs.debug == true }}
-        run: |
-          echo "Building for platform: ${{ matrix.platform }}"
-          echo "GOOS: ${{ matrix.goos }}"
-          echo "GOARCH: ${{ matrix.goarch }}"
-          echo "Version: ${{ steps.version.outputs.version }}"
-          echo "Platforms input: ${{ inputs.platforms }}"
 
       - name: Build binary
         env:
