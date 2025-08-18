@@ -27,6 +27,7 @@ func main() {
 	// 解析命令行参数
 	var showVersion = flag.Bool("version", false, "Show version information")
 	var showHelp = flag.Bool("help", false, "Show help information")
+	var configFile = flag.String("c", "", "Path to configuration file")
 	flag.Parse()
 
 	if *showVersion {
@@ -49,7 +50,7 @@ func main() {
 	}
 
 	// 加载配置
-	cfg := config.Load()
+	cfg := config.LoadWithPath(*configFile)
 
 	// 创建负载均衡器
 	balancer := balance.New(cfg)
