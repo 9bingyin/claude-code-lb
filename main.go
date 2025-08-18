@@ -1,7 +1,12 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"log"
+	"net/http"
+	"os"
+	"time"
 
 	"claude-code-lb/internal/auth"
 	"claude-code-lb/internal/balance"
@@ -14,7 +19,56 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var (
+	version = "dev"
+	commit  = "unknown"
+	date    = "unknown"
+)
+
 func main() {
+	// 解析命令行参数
+	var showVersion = flag.Bool("version", false, "Show version information")
+	var showHelp = flag.Bool("help", false, "Show help information")
+	var healthCheck = flag.Bool("health-check", false, "Perform health check")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("Claude Code Load Balancer\n")
+		fmt.Printf("Version: %s\n", version)
+		fmt.Printf("Commit: %s\n", commit)
+		fmt.Printf("Built: %s\n", date)
+		os.Exit(0)
+	}
+
+	if *showHelp {
+		fmt.Printf("Claude Code Load Balancer - A high-performance load balancer for Claude API endpoints\n\n")
+		fmt.Printf("Usage:\n")
+		fmt.Printf("  claude-code-lb [options]\n\n")
+		fmt.Printf("Options:\n")
+		flag.PrintDefaults()
+		fmt.Printf("\nEnvironment Variables:\n")
+		fmt.Printf("  CONFIG_FILE    Configuration file path (default: config.json)\n")
+		os.Exit(0)
+	}
+
+	if *healthCheck {
+		// 简单的健康检查：尝试连接到默认端口
+		port := os.Getenv("HEALTH_CHECK_PORT")
+		if port == "" {
+			port = "3000"
+		}
+		
+		client := &http.Client{Timeout: 3 * time.Second}
+		resp, err := client.Get(fmt.Sprintf("http://localhost:%s/health", port))
+		if err != nil || resp.StatusCode != http.StatusOK {
+			os.Exit(1)
+		}
+		if resp.Body != nil {
+			resp.Body.Close()
+		}
+		os.Exit(0)
+	}
+
 	// 加载配置
 	cfg := config.Load()
 
@@ -60,6 +114,7 @@ func main() {
 	}
 
 	log.Printf("%s==================== Claude Code Proxy ====================%s", logger.ColorBold, logger.ColorReset)
+	logger.Info("STARTUP", "Version: %s (commit: %s, built: %s)", version, commit, date)
 	logger.Info("STARTUP", "Starting server on port %s", port)
 	logger.Info("STARTUP", "Load balancer: %s (%d servers)", cfg.Algorithm, len(cfg.Servers))
 	logger.Info("STARTUP", "Fallback: %t | Circuit breaker: %ds", cfg.Fallback, cfg.Cooldown)

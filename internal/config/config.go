@@ -88,14 +88,14 @@ func applyDefaults(config types.Config) types.Config {
 			log.Fatalf("Server %d: URL is required", i+1)
 		}
 		if server.Token == "" {
-			log.Printf("⚠️  Server %d (%s): No token specified", i+1, server.URL)
+			log.Printf("WARNING: Server %d (%s): No token specified", i+1, server.URL)
 		}
 		if server.Weight <= 0 && config.Algorithm == "weighted_round_robin" {
-			log.Printf("⚠️  Server %d (%s): Weight should be > 0 for weighted_round_robin", i+1, server.URL)
+			log.Printf("WARNING: Server %d (%s): Weight should be > 0 for weighted_round_robin", i+1, server.URL)
 		}
 		// fallback模式下的优先级验证
 		if config.Mode == "fallback" && server.Priority == 0 {
-			log.Printf("ℹ️  Server %d (%s): Priority not set, will use weight-based priority", i+1, server.URL)
+			log.Printf("INFO: Server %d (%s): Priority not set, will use weight-based priority", i+1, server.URL)
 		}
 	}
 

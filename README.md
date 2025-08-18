@@ -1,202 +1,358 @@
-# Claude Code 代理服务
+# Claude Code Load Balancer
 
-这是一个用 Go 语言实现的高可用 Claude Code 请求转发服务，支持负载均衡、故障转移和健康检查功能。
+高性能的 Claude API 负载均衡器，支持多种分发策略、故障转移和健康检查功能。
+
+[![Build](https://github.com/your-username/claude-code-lb/actions/workflows/build.yml/badge.svg)](https://github.com/your-username/claude-code-lb/actions/workflows/build.yml)
+[![Docker](https://github.com/your-username/claude-code-lb/actions/workflows/docker.yml/badge.svg)](https://github.com/your-username/claude-code-lb/actions/workflows/docker.yml)
 
 ## 功能特性
 
-- **负载均衡**: 支持轮询、加权轮询、随机三种算法
-- **故障转移**: 自动检测服务器故障并切换到可用服务器
-- **健康检查**: 定期检查上游服务器状态，自动恢复可用服务器
-- **流式响应**: 完全支持 Claude Code 的流式响应
-- **配置热加载**: 通过配置文件管理所有设置
-- **多Token支持**: 每个上游服务器可配置独立的 API Token
+- **双工作模式**: 负载均衡模式 + 故障转移模式
+- **多种算法**: 轮询、加权轮询、随机分配
+- **故障转移**: 自动检测故障并切换到备用服务器
+- **健康检查**: 被动健康检查，自动恢复故障服务器
+- **身份验证**: 支持客户端 API 密钥认证
+- **高性能**: 支持流式响应，低延迟代理
+- **统计监控**: 实时请求统计和服务器状态监控
+- **灵活配置**: 支持环境变量和配置文件
 
 ## 快速开始
 
-### 1. 安装依赖
+### 方式 1: 使用二进制文件
+
+1. **下载二进制文件**
+   ```bash
+   # 从 GitHub Releases 下载适合你系统的版本
+   wget https://github.com/your-username/claude-code-lb/releases/latest/download/claude-code-lb-linux-amd64
+   chmod +x claude-code-lb-linux-amd64
+   mv claude-code-lb-linux-amd64 /usr/local/bin/claude-code-lb
+   ```
+
+2. **创建配置文件**
+   ```bash
+   curl -o config.json https://raw.githubusercontent.com/your-username/claude-code-lb/main/config.example.json
+   ```
+
+3. **编辑配置并运行**
+   ```bash
+   vim config.json  # 编辑配置
+   claude-code-lb   # 启动服务
+   ```
+
+### 方式 2: 使用 Docker
 
 ```bash
+# 拉取镜像
+docker pull ghcr.io/your-username/claude-code-lb:latest
+
+# 运行容器
+docker run -d \
+  --name claude-lb \
+  -p 3000:3000 \
+  -v ./config.json:/config.json \
+  ghcr.io/your-username/claude-code-lb:latest
+```
+
+### 方式 3: 从源码构建
+
+```bash
+# 克隆项目
+git clone https://github.com/your-username/claude-code-lb.git
+cd claude-code-lb
+
+# 安装依赖
 go mod download
-```
 
-### 2. 创建配置文件
-
-复制示例配置文件：
-
-```bash
+# 复制配置文件
 cp config.example.json config.json
+
+# 编辑配置
+vim config.json
+
+# 运行服务
+go run main.go
 ```
 
-编辑 `config.json` 配置你的上游服务器：
+## 配置文档
+
+### 基础配置
+
+#### `port` (字符串)
+- **说明**: 服务器监听端口
+- **默认值**: `"3000"`
+- **示例**: `"3000"`, `"8080"`
+
+#### `mode` (字符串)
+- **说明**: 工作模式，决定服务器选择策略
+- **可选值**:
+  - `"load_balance"`: 负载均衡模式，按算法分配请求到所有健康服务器
+  - `"fallback"`: 故障转移模式，严格按优先级选择服务器
+- **默认值**: `"load_balance"`
+
+#### `algorithm` (字符串)
+- **说明**: 负载均衡算法 (仅在 `load_balance` 模式下有效)
+- **可选值**:
+  - `"round_robin"`: 轮询算法，依次轮流选择服务器
+  - `"weighted_round_robin"`: 加权轮询算法，根据权重分配流量
+  - `"random"`: 随机算法，随机选择服务器
+- **默认值**: `"round_robin"`
+
+### 服务器配置
+
+#### `servers` (数组)
+
+每个服务器对象包含以下字段：
+
+##### `url` (字符串, 必填)
+- **说明**: 上游服务器URL
+- **示例**: `"https://api.anthropic.com"`, `"http://localhost:8080"`
+
+##### `weight` (数字)
+- **说明**: 
+  - 负载均衡模式：权重，数值越大分配流量越多
+  - 故障转移模式：用于自动计算优先级
+- **默认值**: `1`
+- **示例**: `5`, `3`, `1`
+
+##### `priority` (数字)
+- **说明**: 优先级 (仅在故障转移模式下有效)
+- **规则**: 数字越小优先级越高，1为最高优先级
+- **特殊值**: `0` 表示根据 `weight` 自动计算优先级
+- **默认值**: `0`
+- **示例**: `1`, `2`, `3`
+
+##### `token` (字符串, 可选)
+- **说明**: 访问上游服务器的API令牌
+- **建议**: 强烈推荐设置以提高安全性
+- **示例**: `"sk-your-token-here"`
+
+### 故障处理
+
+#### `cooldown` (数字)
+- **说明**: 服务器冷却时间 (秒)
+- **功能**: 服务器故障后的等待时间，支持动态退避
+- **动态退避**: 失败次数越多，冷却时间越长 (最大10分钟)
+- **默认值**: `60`
+
+#### `fallback` (布尔值)
+- **说明**: 向后兼容字段 (已废弃，建议使用 `mode`)
+- **规则**: `true` 等同于 `mode="fallback"`
+- **默认值**: `false`
+
+### 身份验证
+
+#### `auth` (布尔值)
+- **说明**: 是否启用客户端身份验证
+- **规则**:
+  - `true`: 要求客户端提供有效的API密钥
+  - `false`: 允许任何客户端访问
+- **默认值**: `false`
+
+#### `auth_keys` (字符串数组)
+- **说明**: 允许的客户端API密钥列表
+- **前提**: 仅在 `auth=true` 时有效，此时为必填字段
+- **使用**: 客户端需要在请求头提供 `Authorization: Bearer <key>`
+
+## 配置示例
+
+### 负载均衡模式
+适合高可用分布式场景：
 
 ```json
 {
   "port": "3000",
+  "mode": "load_balance",
   "algorithm": "weighted_round_robin",
   "servers": [
     {
-      "url": "https://api.anthropic.com",
+      "url": "https://api1.com",
       "weight": 5,
-      "token": "sk-your-primary-token"
+      "token": "sk-token-1"
     },
     {
-      "url": "https://api.backup.com",
+      "url": "https://api2.com", 
       "weight": 3,
-      "token": "sk-your-backup-token"
+      "token": "sk-token-2"
+    },
+    {
+      "url": "https://api3.com",
+      "weight": 1,
+      "token": "sk-token-3"
     }
   ],
-  "fallback": true,
   "auth": false,
   "cooldown": 60
 }
 ```
 
-### 3. 运行服务
+### 故障转移模式
+适合主备切换场景：
 
-```bash
-go run main.go
+```json
+{
+  "port": "3000",
+  "mode": "fallback",
+  "servers": [
+    {
+      "url": "https://primary.com",
+      "priority": 1,
+      "token": "sk-primary-token"
+    },
+    {
+      "url": "https://backup.com",
+      "priority": 2, 
+      "token": "sk-backup-token"
+    },
+    {
+      "url": "https://emergency.com",
+      "priority": 3,
+      "token": "sk-emergency-token"
+    }
+  ],
+  "auth": true,
+  "auth_keys": [
+    "sk-client-key-1",
+    "sk-client-key-2"
+  ],
+  "cooldown": 30
+}
 ```
 
-服务将在指定端口启动，默认为 3000。
+## 使用方法
 
-### 4. 配置 Claude Code
+### 命令行选项
 
-将 Claude Code 的请求指向你的代理服务：
+```bash
+claude-code-lb [选项]
+
+选项:
+  -version      显示版本信息
+  -help         显示帮助信息
+  -health-check 执行健康检查
+
+环境变量:
+  CONFIG_FILE   配置文件路径 (默认: config.json)
+```
+
+### 配置 Claude Code
+
+设置环境变量将 Claude Code 请求指向代理服务器：
 
 ```bash
 export ANTHROPIC_API_URL="http://localhost:3000"
 ```
 
-## 配置说明
-
-### 基本配置
-
-| 字段 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| port | string | "3000" | 服务监听端口 |
-| fallback | bool | false | 是否启用故障转移 |
-
-### 负载均衡配置
-
-```json
-{
-  "algorithm": "round_robin",
-  "servers": [...]
-}
-```
-
-#### 负载均衡算法
-
-- **round_robin**: 轮询算法，平均分配请求
-- **weighted_round_robin**: 加权轮询，根据权重分配请求
-- **random**: 随机选择服务器
-
-#### 服务器配置
-
-```json
-{
-  "url": "https://api.example.com",
-  "weight": 5,
-  "token": "sk-your-token-here"
-}
-```
-
-- **url**: 上游服务器地址
-- **weight**: 权重（仅在加权轮询模式下生效）
-- **token**: 该服务器使用的 API Token
-
-### 健康检查配置
-
-健康检查现在是内置功能，通过 `cooldown` 参数配置冷却时间（秒）：
-
-```json
-{
-  "cooldown": 60
-}
-```
-
-## API 端点
+### API 端点
 
 - `GET /health` - 服务健康状态和统计信息
-- `ANY /v1/*` - 转发所有 Claude API 请求
+- `ANY /v1/*` - 代理所有 Claude API 请求
 
-### 健康检查响应示例
-
+健康检查响应示例：
 ```json
 {
   "status": "ok",
   "total_servers": 3,
   "available_servers": 2,
   "load_balancer": "weighted_round_robin",
-  "fallback": true,
-  "time": "2025-08-15T10:30:00Z"
+  "mode": "load_balance",
+  "time": "2025-08-18T08:30:00Z"
 }
 ```
 
-## 工作原理
+## 工作模式对比
 
-1. **请求接收**: 接收 Claude Code 发送的请求
-2. **服务器选择**: 根据配置的负载均衡算法选择可用服务器
-3. **请求转发**: 将请求转发到选中的上游服务器，使用对应的 Token
-4. **故障处理**: 如果请求失败或返回 5xx 错误，标记服务器为不可用
-5. **自动重试**: 如果启用 fallback，自动重试其他可用服务器
-6. **健康恢复**: 定期检查不可用服务器，自动恢复可用状态
+| 特性 | 负载均衡模式 | 故障转移模式 |
+|------|-------------|-------------|
+| 服务器选择策略 | 按算法分配到所有健康服务器 | 严格按优先级选择 |
+| 流量分配 | 平衡分配 | 集中到最高优先级服务器 |
+| 适用场景 | 高并发、性能优化 | 主备切换、灾难恢复 |
+| 算法支持 | 轮询、加权轮询、随机 | 优先级排序 |
+| 配置复杂度 | 中等 (需要调整权重) | 简单 (设置优先级) |
 
-## 故障转移机制
+## 开发和构建
 
-当服务器出现以下情况时会被标记为不可用：
-- 网络连接失败
-- 返回 5xx 状态码
-- 健康检查失败
-
-启用 fallback 后，系统会：
-- 自动切换到其他可用服务器
-- 如果所有服务器都不可用，尝试所有服务器（最后的保险机制）
-- 通过健康检查自动恢复故障服务器
-
-## 环境变量
-
-可以通过环境变量指定配置文件路径：
+### 本地开发
 
 ```bash
-export CONFIG_FILE="/path/to/your/config.json"
+# 安装依赖
+go mod download
+
+# 运行测试
+go test ./...
+
+# 本地运行
+go run main.go
+```
+
+### 构建二进制
+
+```bash
+# 构建当前平台
+go build -o claude-code-lb .
+
+# 交叉编译
+GOOS=linux GOARCH=amd64 go build -o claude-code-lb-linux-amd64 .
+GOOS=darwin GOARCH=arm64 go build -o claude-code-lb-darwin-arm64 .
+```
+
+### Docker 构建
+
+```bash
+# 构建镜像
+docker build -t claude-code-lb .
+
+# 多架构构建
+docker buildx build --platform linux/amd64,linux/arm64 -t claude-code-lb .
 ```
 
 ## 安全建议
 
-1. 在生产环境运行时设置：
+1. **生产环境配置**
    ```bash
    export GIN_MODE=release
    ```
 
-2. 使用防火墙限制访问
-3. 定期轮换 API Token
-4. 监控服务器日志和健康状态
+2. **启用身份验证**
+   ```json
+   {
+     "auth": true,
+     "auth_keys": ["your-secure-key"]
+   }
+   ```
 
-## 示例场景
+3. **网络安全**
+   - 使用防火墙限制访问
+   - 配置 HTTPS (建议在反向代理层)
+   - 定期轮换 API Token
 
-### 场景 1: 主备模式
-```json
-{
-  "algorithm": "weighted_round_robin",
-  "servers": [
-    {"url": "https://primary.com", "weight": 10, "token": "primary-token"},
-    {"url": "https://backup.com", "weight": 1, "token": "backup-token"}
-  ],
-  "fallback": true
-}
-```
+4. **监控建议**
+   - 监控 `/health` 端点
+   - 设置日志聚合
+   - 配置告警机制
 
-### 场景 2: 多服务器均衡
-```json
-{
-  "algorithm": "round_robin",
-  "servers": [
-    {"url": "https://server1.com", "token": "token1"},
-    {"url": "https://server2.com", "token": "token2"},
-    {"url": "https://server3.com", "token": "token3"}
-  ]
-}
-```
+## 监控和日志
 
-这样你就可以实现高可用的 Claude Code 代理服务，确保服务的稳定性和可靠性。
+服务提供详细的日志输出和统计信息：
+
+- **启动日志**: 显示配置信息和服务器状态
+- **请求日志**: 记录每个代理请求的详细信息
+- **错误日志**: 记录故障服务器和错误信息
+- **统计报告**: 定期输出请求统计和响应时间
+
+## 贡献
+
+欢迎提交 Issues 和 Pull Requests！
+
+1. Fork 这个项目
+2. 创建你的特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交你的修改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 提交 Pull Request
+
+## 许可证
+
+本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
+
+---
+
+**需要帮助？** 查看 [Issues](https://github.com/your-username/claude-code-lb/issues) 或创建新的问题。
