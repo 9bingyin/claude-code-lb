@@ -9,7 +9,16 @@ import (
 )
 
 func Load() types.Config {
-	configFile := getEnv("CONFIG_FILE", "config.json")
+	return LoadWithPath("")
+}
+
+func LoadWithPath(configPath string) types.Config {
+	var configFile string
+	if configPath != "" {
+		configFile = configPath
+	} else {
+		configFile = getEnv("CONFIG_FILE", "config.json")
+	}
 
 	if _, err := os.Stat(configFile); err != nil {
 		log.Fatalf("Config file %s not found. Please create it based on config.example.json", configFile)

@@ -27,6 +27,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -a -installsuffix cgo \
     -o claude-code-lb .
 
+# Create data directory structure
+RUN mkdir -p /tmp/data && chown 65534:65534 /tmp/data
+
 # Final stage - minimal image
 FROM scratch
 
@@ -36,9 +39,14 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 # Copy the compiled binary
 COPY --from=builder /app/claude-code-lb /claude-code-lb
 
-# Create a non-root user (scratch doesn't have adduser, so we simulate it)
-# Note: In scratch, we can't create users, so we'll use numeric UID
+# Create data directory for configuration
+COPY --from=builder --chown=65534:65534 /tmp/data /data
+
+# Create a non-root user (scratch doesn't have adduser, so we use numeric UID)
 USER 65534:65534
+
+# Create volume mount point for configuration and future extensions
+VOLUME ["/data"]
 
 # Expose port
 EXPOSE 3000
@@ -51,5 +59,5 @@ LABEL org.opencontainers.image.title="Claude Code Load Balancer" \
       org.opencontainers.image.revision="${COMMIT}" \
       org.opencontainers.image.created="${DATE}"
 
-# Run the application
-ENTRYPOINT ["/claude-code-lb"]
+# Run the application with config file in /data
+ENTRYPOINT ["/claude-code-lb", "-c", "/data/config.json"]

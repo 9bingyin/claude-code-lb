@@ -48,22 +48,23 @@ jobs:
       - name: Generate tags
         id: tags
         run: |
+          TIMESTAMP=$(date +%Y%m%d%H%M)
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             # 手动触发：使用时间戳标签
             if [ "${{ inputs.tag }}" = "dev" ]; then
-              TAG="$(date +%Y%m%d%H%M)"
+              TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-${TIMESTAMP}"
             else
-              TAG="${{ inputs.tag }}"
+              TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
             fi
           elif [ "${{ github.event_name }}" = "release" ]; then
             # 发布触发：使用发布标签
-            TAG="${{ github.event.release.tag_name }}"
+            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.release.tag_name }}"
           else
             # 默认标签
-            TAG="latest"
+            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
           fi
-          echo "tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$TAG" >> $GITHUB_OUTPUT
-          echo "Generated tag: $TAG"
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "Generated tags: ${TAGS}"
 
       - name: Get build info  
         id: build-info
