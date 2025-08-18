@@ -28,7 +28,7 @@ func (h *Checker) PassiveHealthCheck() {
 	for range ticker.C {
 		now := time.Now()
 		serverStatus := h.balancer.GetServerStatus()
-		
+
 		for _, server := range h.config.Servers {
 			// 检查冷却时间是否已到期
 			if !serverStatus[server.URL] && now.After(server.DownUntil) {

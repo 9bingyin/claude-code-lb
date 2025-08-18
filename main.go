@@ -29,13 +29,13 @@ func main() {
 
 	// 设置 Gin 为发布模式，关闭调试日志
 	gin.SetMode(gin.ReleaseMode)
-	
+
 	// 创建不带默认中间件的 Gin 引擎
 	r := gin.New()
-	
+
 	// 添加我们自己的日志中间件
 	r.Use(statsReporter.GinLoggerMiddleware())
-	
+
 	// 添加恢复中间件
 	r.Use(gin.Recovery())
 
@@ -50,7 +50,7 @@ func main() {
 
 	// 启动被动健康检查（自动恢复冷却期过期的服务器）
 	go healthChecker.PassiveHealthCheck()
-	
+
 	// 启动统计报告器
 	go statsReporter.StartReporter()
 

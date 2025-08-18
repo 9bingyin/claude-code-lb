@@ -25,7 +25,7 @@ func formatRequestURL(method, serverURL, path, query string) string {
 	// 但保留协议的 ://
 	fullURL = strings.Replace(fullURL, "http:/", "http://", 1)
 	fullURL = strings.Replace(fullURL, "https:/", "https://", 1)
-	
+
 	return fmt.Sprintf("%s %s", method, fullURL)
 }
 
@@ -34,40 +34,28 @@ func Handler(balancer *balance.Balancer, statsReporter *stats.Reporter) gin.Hand
 		startTime := time.Now()
 		statsReporter.IncrementRequestCount()
 
-		// 实现请求级重试
-		maxRetries := 3 // 最大重试次数
+		// 简化重试逻辑：最多尝试3次
+		maxRetries := 3
 		var lastErr error
-		triedServers := make(map[string]bool) // 记录已尝试的服务器
-		
+
 		for attempt := 0; attempt < maxRetries; attempt++ {
-			// 第一次尝试正常流程，之后尝试 fallback
-			useFallback := attempt > 0
-			server, err := balancer.GetNextServerWithFallback(useFallback)
+			// 获取服务器（选择器内部处理负载均衡或fallback逻辑）
+			server, err := balancer.GetNextServer()
 			if err != nil {
 				lastErr = err
-				if attempt == maxRetries-1 {
-					logger.Error("PROXY", "All retry attempts failed: %v", err)
-					c.JSON(503, gin.H{"error": "All servers unavailable", "details": err.Error()})
-					return
-				}
+				logger.Warning("PROXY", "Attempt %d failed to get server: %v", attempt+1, err)
 				continue
 			}
-			
-			// 检查是否已经尝试过这个服务器
-			if triedServers[server.URL] {
-				continue // 跳过已尝试的服务器
-			}
-			triedServers[server.URL] = true
 
 			// 尝试请求当前服务器
 			if success := tryRequest(c, server, balancer, statsReporter, startTime, attempt); success {
 				return // 请求成功，结束
 			}
-			
+
 			// 请求失败，记录错误并继续重试
 			statsReporter.IncrementErrorCount()
 		}
-		
+
 		// 所有重试都失败
 		logger.Error("PROXY", "All retries exhausted, last error: %v", lastErr)
 		c.JSON(502, gin.H{"error": "All servers failed after retries"})
@@ -138,7 +126,7 @@ func tryRequest(c *gin.Context, server *types.UpstreamServer, balancer *balance.
 	responseTime := time.Since(startTime)
 	statsReporter.AddResponseTime(responseTime.Milliseconds())
 	statsReporter.AddServerStats(server.URL, responseTime.Milliseconds())
-	
+
 	// 标记服务器为健康（重置失败计数）
 	balancer.MarkServerHealthy(server.URL)
 

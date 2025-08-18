@@ -41,7 +41,7 @@ func (r *Reporter) AddResponseTime(responseTime int64) {
 func (r *Reporter) AddServerStats(serverURL string, responseTime int64) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	
+
 	r.requestCountByServer[serverURL]++
 	r.responseTimeByServer[serverURL] += responseTime
 }
@@ -53,8 +53,8 @@ func (r *Reporter) LogStats() {
 	if totalRequests > 0 {
 		avgResponseTime = atomic.LoadInt64(&r.totalResponseTime) / totalRequests
 	}
-	
-	logger.Info("STATS", "Requests: %d | Errors: %d | Avg time: %dms", 
+
+	logger.Info("STATS", "Requests: %d | Errors: %d | Avg time: %dms",
 		totalRequests, totalErrors, avgResponseTime)
 }
 
@@ -80,21 +80,21 @@ func (r *Reporter) GinLoggerMiddleware() gin.HandlerFunc {
 
 		// 计算延迟
 		latency := time.Since(start)
-		
+
 		// 获取状态码
 		statusCode := c.Writer.Status()
-		
+
 		// 获取客户端IP
 		clientIP := c.ClientIP()
-		
+
 		// 获取请求方法
 		method := c.Request.Method
-		
+
 		// 构建完整路径
 		if raw != "" {
 			path = path + "?" + raw
 		}
-		
+
 		// 根据状态码选择日志级别
 		if statusCode >= 500 {
 			logger.Error("GIN", "%s %s | %d | %v | %s", method, path, statusCode, latency, clientIP)

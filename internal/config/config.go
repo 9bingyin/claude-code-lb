@@ -42,9 +42,31 @@ func applyDefaults(config types.Config) types.Config {
 		config.Cooldown = 60 // 默认1分钟冷却时间
 	}
 
+	// 处理模式配置（向后兼容）
+	if config.Mode == "" {
+		if config.Fallback {
+			config.Mode = "fallback"
+		} else {
+			config.Mode = "load_balance"
+		}
+	}
+
 	// 验证配置
 	if len(config.Servers) == 0 {
 		log.Fatal("At least one upstream server is required")
+	}
+
+	// 验证模式
+	validModes := []string{"load_balance", "fallback"}
+	isValidMode := false
+	for _, mode := range validModes {
+		if config.Mode == mode {
+			isValidMode = true
+			break
+		}
+	}
+	if !isValidMode {
+		log.Fatalf("Invalid mode '%s'. Valid options: %v", config.Mode, validModes)
 	}
 
 	// 验证算法类型
@@ -71,6 +93,10 @@ func applyDefaults(config types.Config) types.Config {
 		if server.Weight <= 0 && config.Algorithm == "weighted_round_robin" {
 			log.Printf("⚠️  Server %d (%s): Weight should be > 0 for weighted_round_robin", i+1, server.URL)
 		}
+		// fallback模式下的优先级验证
+		if config.Mode == "fallback" && server.Priority == 0 {
+			log.Printf("ℹ️  Server %d (%s): Priority not set, will use weight-based priority", i+1, server.URL)
+		}
 	}
 
 	// 验证认证配置
@@ -78,6 +104,7 @@ func applyDefaults(config types.Config) types.Config {
 		log.Fatal("Authentication enabled but no auth_keys specified")
 	}
 
+	log.Printf("Configuration loaded: mode=%s, algorithm=%s", config.Mode, config.Algorithm)
 	return config
 }
 
