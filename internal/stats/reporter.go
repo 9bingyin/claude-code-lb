@@ -97,16 +97,16 @@ func (r *Reporter) GinLoggerMiddleware() gin.HandlerFunc {
 
 		// 根据状态码选择日志级别
 		if statusCode >= 500 {
-			logger.Error("GIN", "%s %s | %d | %v | %s", method, path, statusCode, latency, clientIP)
+			logger.Error("HTTP", "%s %s | %d | %v | %s", method, path, statusCode, latency, clientIP)
 		} else if statusCode >= 400 {
-			logger.Warning("GIN", "%s %s | %d | %v | %s", method, path, statusCode, latency, clientIP)
+			logger.Warning("HTTP", "%s %s | %d | %v | %s", method, path, statusCode, latency, clientIP)
 		} else {
 			// 对于健康检查路径，使用更低级别的日志
 			if path == "/health" {
 				// 健康检查请求不记录日志，避免日志噪音
 				return
 			}
-			logger.Info("GIN", "%s %s | %d | %v | %s", method, path, statusCode, latency, clientIP)
+			logger.Info("HTTP", "%s %s | %d | %v | %s", method, path, statusCode, latency, clientIP)
 		}
 	}
 }

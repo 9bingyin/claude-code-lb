@@ -56,9 +56,9 @@ func NewFallbackSelector(config types.Config) *FallbackSelector {
 		return fs.orderedServers[i].Priority < fs.orderedServers[j].Priority
 	})
 
-	logger.Info("SELECTOR", "Fallback selector initialized with %d servers", len(fs.orderedServers))
+	logger.Info("LOAD", "Fallback selector initialized with %d servers", len(fs.orderedServers))
 	for i, server := range fs.orderedServers {
-		logger.Info("SELECTOR", "Priority %d: %s (weight: %d)", i+1, server.URL, server.Weight)
+		logger.Info("LOAD", "Priority %d: %s (weight: %d)", i+1, server.URL, server.Weight)
 	}
 
 	return fs
@@ -75,7 +75,7 @@ func (fs *FallbackSelector) SelectServer() (*types.UpstreamServer, error) {
 	for i, server := range fs.orderedServers {
 		// 检查服务器是否可用且未在冷却期
 		if fs.serverStatus[server.URL] && now.After(server.DownUntil) {
-			logger.Info("SELECTOR", "Selected server by priority %d: %s", i+1, server.URL)
+			logger.Info("LOAD", "Selected server by priority %d: %s", i+1, server.URL)
 			return &fs.orderedServers[i], nil
 		}
 	}
@@ -83,11 +83,11 @@ func (fs *FallbackSelector) SelectServer() (*types.UpstreamServer, error) {
 	// 如果所有服务器都不可用，尝试选择冷却时间最短的服务器进行紧急重试
 	fallbackServer := fs.getEmergencyFallbackServer()
 	if fallbackServer != nil {
-		logger.Warning("SELECTOR", "Using emergency fallback server: %s", fallbackServer.URL)
+		logger.Warning("LOAD", "Using emergency fallback server: %s", fallbackServer.URL)
 		return fallbackServer, nil
 	}
 
-	logger.Error("SELECTOR", "No available servers in fallback mode")
+	logger.Error("LOAD", "No available servers in fallback mode")
 	return nil, errors.New("no available servers")
 }
 
@@ -155,7 +155,7 @@ func (fs *FallbackSelector) MarkServerDown(url string) {
 		}
 	}
 
-	logger.Warning("SELECTOR", "Server marked down: %s (priority order, failures: %d, cooldown: %v)", url, failures, cooldownDuration)
+	logger.Warning("LOAD", "Server marked down: %s (priority order, failures: %d, cooldown: %v)", url, failures, cooldownDuration)
 }
 
 // GetAvailableServers 获取所有可用服务器（按优先级排序）
@@ -210,7 +210,7 @@ func (fs *FallbackSelector) RecoverServer(url string) {
 		}
 	}
 
-	logger.Success("SELECTOR", "Server recovered: %s", url)
+	logger.Success("LOAD", "Server recovered: %s", url)
 }
 
 // MarkServerHealthy 标记服务器为健康
@@ -222,7 +222,7 @@ func (fs *FallbackSelector) MarkServerHealthy(url string) {
 	if fs.failureCount[url] > 0 {
 		oldFailures := fs.failureCount[url]
 		fs.failureCount[url] = 0
-		logger.Info("SELECTOR", "Server %s healthy, reset failure count (was %d)", url, oldFailures)
+		logger.Info("LOAD", "Server %s healthy, reset failure count (was %d)", url, oldFailures)
 	}
 
 	// 确保服务器状态为可用
@@ -242,6 +242,6 @@ func (fs *FallbackSelector) MarkServerHealthy(url string) {
 				break
 			}
 		}
-		logger.Success("SELECTOR", "Server %s auto-recovered from healthy request", url)
+		logger.Success("LOAD", "Server %s auto-recovered from healthy request", url)
 	}
 }

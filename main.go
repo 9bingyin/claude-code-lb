@@ -93,14 +93,14 @@ func main() {
 	}
 
 	log.Printf("%s==================== Claude Code Proxy ====================%s", logger.ColorBold, logger.ColorReset)
-	logger.Info("STARTUP", "Version: %s (commit: %s, built: %s)", version, commit, date)
-	logger.Info("STARTUP", "Starting server on port %s", port)
-	logger.Info("STARTUP", "Load balancer: %s (%d servers)", cfg.Algorithm, len(cfg.Servers))
-	logger.Info("STARTUP", "Fallback: %t | Circuit breaker: %ds", cfg.Fallback, cfg.Cooldown)
-	logger.Info("STARTUP", "Health check: passive (auto-recovery after cooldown)")
-	logger.Info("STARTUP", "Authentication: %t", cfg.Auth)
+	logger.Info("BOOT", "Version: %s (commit: %s, built: %s)", version, commit, date)
+	logger.Info("BOOT", "Starting server on port %s", port)
+	logger.Info("BOOT", "Load balancer: %s (%d servers)", cfg.Algorithm, len(cfg.Servers))
+	logger.Info("BOOT", "Fallback: %t | Circuit breaker: %ds", cfg.Fallback, cfg.Cooldown)
+	logger.Info("BOOT", "Health check: passive (auto-recovery after cooldown)")
+	logger.Info("BOOT", "Authentication: %t", cfg.Auth)
 	if cfg.Auth {
-		logger.Info("STARTUP", "  Allowed keys: %d", len(cfg.AuthKeys))
+		logger.Info("BOOT", "  Allowed keys: %d", len(cfg.AuthKeys))
 	}
 	log.Printf("%s==========================================================%s", logger.ColorBold, logger.ColorReset)
 	log.Fatal(r.Run(":" + port))

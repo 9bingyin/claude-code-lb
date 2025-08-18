@@ -43,7 +43,7 @@ func NewLoadBalancer(config types.Config) *LoadBalancer {
 		lb.failureCount[server.URL] = 0
 	}
 
-	logger.Info("SELECTOR", "Load balancer initialized with algorithm: %s", config.Algorithm)
+	logger.Info("LOAD", "Load balancer initialized with algorithm: %s", config.Algorithm)
 	return lb
 }
 
@@ -51,7 +51,7 @@ func NewLoadBalancer(config types.Config) *LoadBalancer {
 func (lb *LoadBalancer) SelectServer() (*types.UpstreamServer, error) {
 	availableServers := lb.GetAvailableServers()
 	if len(availableServers) == 0 {
-		logger.Error("SELECTOR", "No available servers for load balancing")
+		logger.Error("LOAD", "No available servers for load balancing")
 		return nil, errors.New("no available servers")
 	}
 
@@ -70,7 +70,7 @@ func (lb *LoadBalancer) SelectServer() (*types.UpstreamServer, error) {
 		return nil, errors.New("failed to select server")
 	}
 
-	logger.Info("SELECTOR", "Selected server: %s (algorithm: %s)", selectedServer.URL, lb.config.Algorithm)
+	logger.Info("LOAD", "Selected server: %s (algorithm: %s)", selectedServer.URL, lb.config.Algorithm)
 	return selectedServer, nil
 }
 
@@ -186,7 +186,7 @@ func (lb *LoadBalancer) MarkServerDown(url string) {
 		}
 	}
 
-	logger.Warning("SELECTOR", "Server marked down: %s (failures: %d, cooldown: %v)", url, failures, cooldownDuration)
+	logger.Warning("LOAD", "Server marked down: %s (failures: %d, cooldown: %v)", url, failures, cooldownDuration)
 }
 
 // GetAvailableServers 获取所有可用服务器
@@ -233,7 +233,7 @@ func (lb *LoadBalancer) RecoverServer(url string) {
 		}
 	}
 
-	logger.Success("SELECTOR", "Server recovered: %s", url)
+	logger.Success("LOAD", "Server recovered: %s", url)
 }
 
 // MarkServerHealthy 标记服务器为健康
@@ -245,7 +245,7 @@ func (lb *LoadBalancer) MarkServerHealthy(url string) {
 	if lb.failureCount[url] > 0 {
 		oldFailures := lb.failureCount[url]
 		lb.failureCount[url] = 0
-		logger.Info("SELECTOR", "Server %s healthy, reset failure count (was %d)", url, oldFailures)
+		logger.Info("LOAD", "Server %s healthy, reset failure count (was %d)", url, oldFailures)
 	}
 
 	// 确保服务器状态为可用
@@ -258,6 +258,6 @@ func (lb *LoadBalancer) MarkServerHealthy(url string) {
 				break
 			}
 		}
-		logger.Success("SELECTOR", "Server %s auto-recovered from healthy request", url)
+		logger.Success("LOAD", "Server %s auto-recovered from healthy request", url)
 	}
 }

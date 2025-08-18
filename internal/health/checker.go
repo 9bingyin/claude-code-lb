@@ -34,7 +34,7 @@ func (h *Checker) PassiveHealthCheck() {
 			if !serverStatus[server.URL] && now.After(server.DownUntil) {
 				// 冷却时间已到期，重新标记为可用
 				h.balancer.RecoverServer(server.URL)
-				logger.Success("CIRCUIT", "Server recovered: %s (cooldown expired)", server.URL)
+				logger.Success("HEAL", "Server recovered: %s (cooldown expired)", server.URL)
 			}
 		}
 	}

@@ -30,7 +30,7 @@ func Info(category string, message string, args ...interface{}) {
 	logMutex.Lock()
 	defer logMutex.Unlock()
 	timestamp := formatTimestamp()
-	categoryFormatted := fmt.Sprintf("%s%-8s%s", ColorBlue, category, ColorReset)
+	categoryFormatted := fmt.Sprintf("%s%5s%s", ColorBlue, category, ColorReset)
 	message = fmt.Sprintf(message, args...)
 	log.Printf("%s [%s] %s", timestamp, categoryFormatted, message)
 }
@@ -39,7 +39,7 @@ func Success(category string, message string, args ...interface{}) {
 	logMutex.Lock()
 	defer logMutex.Unlock()
 	timestamp := formatTimestamp()
-	categoryFormatted := fmt.Sprintf("%s%-8s%s", ColorGreen, category, ColorReset)
+	categoryFormatted := fmt.Sprintf("%s%5s%s", ColorGreen, category, ColorReset)
 	message = fmt.Sprintf(message, args...)
 	log.Printf("%s [%s] %s", timestamp, categoryFormatted, message)
 }
@@ -48,7 +48,7 @@ func Warning(category string, message string, args ...interface{}) {
 	logMutex.Lock()
 	defer logMutex.Unlock()
 	timestamp := formatTimestamp()
-	categoryFormatted := fmt.Sprintf("%s%-8s%s", ColorYellow, category, ColorReset)
+	categoryFormatted := fmt.Sprintf("%s%5s%s", ColorYellow, category, ColorReset)
 	message = fmt.Sprintf(message, args...)
 	log.Printf("%s [%s] %s", timestamp, categoryFormatted, message)
 }
@@ -57,7 +57,7 @@ func Error(category string, message string, args ...interface{}) {
 	logMutex.Lock()
 	defer logMutex.Unlock()
 	timestamp := formatTimestamp()
-	categoryFormatted := fmt.Sprintf("%s%-8s%s", ColorRed, category, ColorReset)
+	categoryFormatted := fmt.Sprintf("%s%5s%s", ColorRed, category, ColorReset)
 	message = fmt.Sprintf(message, args...)
 	log.Printf("%s [%s] %s", timestamp, categoryFormatted, message)
 }
