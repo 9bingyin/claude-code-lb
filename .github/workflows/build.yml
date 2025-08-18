@@ -3,8 +3,22 @@ name: Build
 on:
   push:
     branches: [ main ]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/build.yml'
+      - 'Dockerfile'
+      - '.dockerignore'
   pull_request:
     branches: [ main ]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/build.yml'
+      - 'Dockerfile'
+      - '.dockerignore'
   workflow_dispatch:
 
 permissions:
@@ -98,18 +112,4 @@ jobs:
           name: ${{ matrix.name }}
           path: ${{ matrix.name }}
           retention-days: 30
-          compression-level: 9
-
-  merge-artifacts:
-    name: Merge Build Artifacts  
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Merge all artifacts
-        uses: actions/upload-artifact/merge@v4
-        with:
-          name: all-binaries
-          pattern: claude-code-lb-*
-          delete-merged: true
-          retention-days: 90
           compression-level: 9

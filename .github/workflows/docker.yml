@@ -1,14 +1,14 @@
 name: Docker Build and Push
 
 on:
-  push:
-    branches: [ main ]
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       tag:
         description: 'Docker image tag'
         required: false
-        default: 'latest'
+        default: 'dev'
       platforms:
         description: 'Target platforms'
         required: false
@@ -49,13 +49,17 @@ jobs:
         id: tags
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # 手动触发：使用用户指定的标签
-            TAG="${{ inputs.tag }}"
-            if [ "$TAG" = "latest" ] && [ "${{ github.ref_name }}" != "main" ]; then
-              TAG="manual-$(date +%Y%m%d-%H%M%S)"
+            # 手动触发：使用时间戳标签
+            if [ "${{ inputs.tag }}" = "dev" ]; then
+              TAG="$(date +%Y%m%d%H%M)"
+            else
+              TAG="${{ inputs.tag }}"
             fi
+          elif [ "${{ github.event_name }}" = "release" ]; then
+            # 发布触发：使用发布标签
+            TAG="${{ github.event.release.tag_name }}"
           else
-            # 自动触发：主分支使用latest
+            # 默认标签
             TAG="latest"
           fi
           echo "tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$TAG" >> $GITHUB_OUTPUT
