@@ -43,10 +43,6 @@ USER 65534:65534
 # Expose port
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD ["/claude-code-lb", "--health-check"] || exit 1
-
 # Labels for better container management
 LABEL org.opencontainers.image.title="Claude Code Load Balancer" \
       org.opencontainers.image.description="A high-performance load balancer for Claude API endpoints" \

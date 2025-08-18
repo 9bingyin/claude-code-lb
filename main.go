@@ -4,9 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
-	"time"
 
 	"claude-code-lb/internal/auth"
 	"claude-code-lb/internal/balance"
@@ -29,7 +27,6 @@ func main() {
 	// 解析命令行参数
 	var showVersion = flag.Bool("version", false, "Show version information")
 	var showHelp = flag.Bool("help", false, "Show help information")
-	var healthCheck = flag.Bool("health-check", false, "Perform health check")
 	flag.Parse()
 
 	if *showVersion {
@@ -48,24 +45,6 @@ func main() {
 		flag.PrintDefaults()
 		fmt.Printf("\nEnvironment Variables:\n")
 		fmt.Printf("  CONFIG_FILE    Configuration file path (default: config.json)\n")
-		os.Exit(0)
-	}
-
-	if *healthCheck {
-		// 简单的健康检查：尝试连接到默认端口
-		port := os.Getenv("HEALTH_CHECK_PORT")
-		if port == "" {
-			port = "3000"
-		}
-
-		client := &http.Client{Timeout: 3 * time.Second}
-		resp, err := client.Get(fmt.Sprintf("http://localhost:%s/health", port))
-		if err != nil || resp.StatusCode != http.StatusOK {
-			os.Exit(1)
-		}
-		if resp.Body != nil {
-			resp.Body.Close()
-		}
 		os.Exit(0)
 	}
 
