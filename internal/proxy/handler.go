@@ -14,6 +14,33 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// getHopByHopHeaders 返回hop-by-hop头集合，包括Connection头中指定的自定义头
+func getHopByHopHeaders(connectionHeader string) map[string]bool {
+	hopByHopHeaders := map[string]bool{
+		"connection":         true,
+		"keep-alive":        true,
+		"proxy-authenticate": true,
+		"proxy-authorization": true,
+		"te":                true,
+		"trailers":          true,
+		"transfer-encoding": true,
+		"upgrade":           true,
+	}
+	
+	// 解析Connection头中指定的额外hop-by-hop头
+	if connectionHeader != "" {
+		connectionTokens := strings.Split(connectionHeader, ",")
+		for _, token := range connectionTokens {
+			token = strings.ToLower(strings.TrimSpace(token))
+			if token != "" && token != "close" && token != "keep-alive" {
+				hopByHopHeaders[token] = true
+			}
+		}
+	}
+	
+	return hopByHopHeaders
+}
+
 // formatRequestURL 格式化完整的请求URL用于日志
 func formatRequestURL(method, serverURL, path, query string) string {
 	fullURL := serverURL + path
@@ -93,11 +120,15 @@ func tryRequest(c *gin.Context, server *types.UpstreamServer, balancer *balance.
 		return false
 	}
 
+	// 获取需要过滤的hop-by-hop头 (RFC 2616)
+	hopByHopHeaders := getHopByHopHeaders(c.Request.Header.Get("Connection"))
+	hopByHopHeaders["host"] = true // 额外添加host头
+
 	for key, values := range c.Request.Header {
 		lowerKey := strings.ToLower(key)
 		if lowerKey == "authorization" {
 			req.Header.Set(key, "Bearer "+server.Token)
-		} else if lowerKey != "host" && lowerKey != "connection" && lowerKey != "upgrade" && lowerKey != "proxy-connection" {
+		} else if !hopByHopHeaders[lowerKey] {
 			for _, value := range values {
 				req.Header.Add(key, value)
 			}
@@ -140,10 +171,15 @@ func tryRequest(c *gin.Context, server *types.UpstreamServer, balancer *balance.
 		logger.Warning("PROXY", "Client error: %s | Status: %d (%dms)", fullRequestURL, resp.StatusCode, responseTime.Milliseconds())
 	}
 
-	// 复制响应头
+	// 复制响应头，但要过滤hop-by-hop头
+	responseHopByHopHeaders := getHopByHopHeaders(resp.Header.Get("Connection"))
+
 	for key, values := range resp.Header {
-		for _, value := range values {
-			c.Header(key, value)
+		lowerKey := strings.ToLower(key)
+		if !responseHopByHopHeaders[lowerKey] {
+			for _, value := range values {
+				c.Header(key, value)
+			}
 		}
 	}
 
