@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -17,16 +18,16 @@ import (
 // getHopByHopHeaders 返回hop-by-hop头集合，包括Connection头中指定的自定义头
 func getHopByHopHeaders(connectionHeader string) map[string]bool {
 	hopByHopHeaders := map[string]bool{
-		"connection":         true,
-		"keep-alive":        true,
-		"proxy-authenticate": true,
+		"connection":          true,
+		"keep-alive":          true,
+		"proxy-authenticate":  true,
 		"proxy-authorization": true,
-		"te":                true,
-		"trailers":          true,
-		"transfer-encoding": true,
-		"upgrade":           true,
+		"te":                  true,
+		"trailers":            true,
+		"transfer-encoding":   true,
+		"upgrade":             true,
 	}
-	
+
 	// 解析Connection头中指定的额外hop-by-hop头
 	if connectionHeader != "" {
 		connectionTokens := strings.Split(connectionHeader, ",")
@@ -37,7 +38,7 @@ func getHopByHopHeaders(connectionHeader string) map[string]bool {
 			}
 		}
 	}
-	
+
 	return hopByHopHeaders
 }
 
@@ -145,10 +146,29 @@ func tryRequest(c *gin.Context, server *types.UpstreamServer, balancer *balance.
 
 	// 检查响应状态，如果是5xx错误或429速率限制，标记服务器为不可用
 	if resp.StatusCode >= 500 || resp.StatusCode == 429 {
-		if resp.StatusCode == 429 {
-			logger.Warning("PROXY", "Rate limited: %s | Status: %d", fullRequestURL, resp.StatusCode)
+		// 对于服务器错误，读取响应体以获取错误详情（因为不会转发给客户端）
+		bodyBytes, bodyErr := io.ReadAll(resp.Body)
+		var errorDetail string
+		if bodyErr != nil {
+			errorDetail = fmt.Sprintf("(failed to read response body: %v)", bodyErr)
 		} else {
-			logger.Error("PROXY", "Server error: %s | Status: %d", fullRequestURL, resp.StatusCode)
+			errorDetail = strings.TrimSpace(string(bodyBytes))
+			// 清理换行符，使日志更紧凑
+			errorDetail = strings.ReplaceAll(errorDetail, "\n", " ")
+			errorDetail = strings.ReplaceAll(errorDetail, "\r", "")
+			// 限制错误详情长度以避免日志过长
+			if len(errorDetail) > 500 {
+				errorDetail = errorDetail[:500] + "..."
+			}
+			if errorDetail == "" {
+				errorDetail = "(empty response body)"
+			}
+		}
+
+		if resp.StatusCode == 429 {
+			logger.Warning("PROXY", "Rate limited: %s | Status: %d | Response: %s", fullRequestURL, resp.StatusCode, errorDetail)
+		} else {
+			logger.Error("PROXY", "Server error: %s | Status: %d | Response: %s", fullRequestURL, resp.StatusCode, errorDetail)
 		}
 		balancer.MarkServerDown(server.URL)
 		return false
@@ -168,6 +188,7 @@ func tryRequest(c *gin.Context, server *types.UpstreamServer, balancer *balance.
 	} else if resp.StatusCode < 400 {
 		logger.Info("PROXY", "Response: %s | Status: %d (%dms)", fullRequestURL, resp.StatusCode, responseTime.Milliseconds())
 	} else {
+		// 对于客户端错误，只记录状态码（因为响应体会被转发给客户端）
 		logger.Warning("PROXY", "Client error: %s | Status: %d (%dms)", fullRequestURL, resp.StatusCode, responseTime.Milliseconds())
 	}
 

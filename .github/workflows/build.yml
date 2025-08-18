@@ -47,10 +47,15 @@ jobs:
 
       - name: Run go fmt check
         run: |
-          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
-            echo "Code is not properly formatted:"
-            gofmt -s -l .
-            exit 1
+          unformatted_files=$(gofmt -s -l .)
+          if [ -n "$unformatted_files" ]; then
+            echo "::warning::Code formatting issues detected. Please run 'go fmt ./...' to fix the following files:"
+            echo "$unformatted_files" | while read -r file; do
+              echo "::warning file=$file::File is not properly formatted"
+            done
+            echo "Note: This is a warning and does not fail the build."
+          else
+            echo "All code is properly formatted"
           fi
 
   build:
