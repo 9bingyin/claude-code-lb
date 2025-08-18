@@ -23,6 +23,9 @@ func Handler(config types.Config, balancer *balance.Balancer) gin.HandlerFunc {
 			}
 		}
 
+		// TODO: 考虑添加失败机制 - 当所有服务器都不可用时返回503状态码
+		// 目前总是返回200状态码，即使没有可用服务器也显示"ok"
+		// 需要收集更多样本数据后再决定是否修改
 		c.JSON(200, gin.H{
 			"status":            "ok",
 			"total_servers":     len(config.Servers),

@@ -62,36 +62,25 @@ func Handler(balancer *balance.Balancer, statsReporter *stats.Reporter) gin.Hand
 		startTime := time.Now()
 		statsReporter.IncrementRequestCount()
 
-		// 简化重试逻辑：最多尝试3次
-		maxRetries := 3
-		var lastErr error
-
-		for attempt := 0; attempt < maxRetries; attempt++ {
-			// 获取服务器（选择器内部处理负载均衡或fallback逻辑）
-			server, err := balancer.GetNextServer()
-			if err != nil {
-				lastErr = err
-				logger.Warning("PROXY", "Attempt %d failed to get server: %v", attempt+1, err)
-				continue
-			}
-
-			// 尝试请求当前服务器
-			if success := tryRequest(c, server, balancer, statsReporter, startTime, attempt); success {
-				return // 请求成功，结束
-			}
-
-			// 请求失败，记录错误并继续重试
-			statsReporter.IncrementErrorCount()
+		// 获取可用服务器
+		server, err := balancer.GetNextServer()
+		if err != nil {
+			logger.Error("PROXY", "No available servers: %v", err)
+			c.JSON(502, gin.H{"error": "No available servers"})
+			return
 		}
 
-		// 所有重试都失败
-		logger.Error("PROXY", "All retries exhausted, last error: %v", lastErr)
-		c.JSON(502, gin.H{"error": "All servers failed after retries"})
+		// 转发请求到选定的服务器
+		success := forwardRequest(c, server, balancer, statsReporter, startTime)
+		if !success {
+			statsReporter.IncrementErrorCount()
+			c.JSON(502, gin.H{"error": "Request failed"})
+		}
 	}
 }
 
-// tryRequest 尝试对指定服务器发起请求
-func tryRequest(c *gin.Context, server *types.UpstreamServer, balancer *balance.Balancer, statsReporter *stats.Reporter, startTime time.Time, attempt int) bool {
+// forwardRequest 转发请求到指定服务器
+func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *balance.Balancer, statsReporter *stats.Reporter, startTime time.Time) bool {
 	target := server.URL + c.Request.URL.Path
 	if c.Request.URL.RawQuery != "" {
 		target += "?" + c.Request.URL.RawQuery
@@ -105,11 +94,7 @@ func tryRequest(c *gin.Context, server *types.UpstreamServer, balancer *balance.
 
 	// 请求日志 - 显示完整URL
 	fullRequestURL := formatRequestURL(c.Request.Method, server.URL, c.Request.URL.Path, c.Request.URL.RawQuery)
-	if attempt > 0 {
-		logger.Info("PROXY", "Retry %d: %s", attempt, fullRequestURL)
-	} else {
-		logger.Info("PROXY", "%s", fullRequestURL)
-	}
+	logger.Info("PROXY", "%s", fullRequestURL)
 
 	client := &http.Client{
 		Timeout: 60 * time.Second,
