@@ -12,10 +12,10 @@ import (
 
 // FallbackSelector fallback选择器
 type FallbackSelector struct {
-	config        types.Config
-	serverStatus  map[string]bool
-	statusMutex   sync.RWMutex
-	failureCount  map[string]int64 // 服务器失败次数
+	config         types.Config
+	serverStatus   map[string]bool
+	statusMutex    sync.RWMutex
+	failureCount   map[string]int64       // 服务器失败次数
 	orderedServers []types.UpstreamServer // 按优先级排序的服务器列表
 }
 
@@ -36,7 +36,7 @@ func NewFallbackSelector(config types.Config) *FallbackSelector {
 	// 对服务器按优先级排序
 	fs.orderedServers = make([]types.UpstreamServer, len(config.Servers))
 	copy(fs.orderedServers, config.Servers)
-	
+
 	// 如果没有设置priority，则使用权重作为优先级（权重越高优先级越高）
 	for i := range fs.orderedServers {
 		if fs.orderedServers[i].Priority == 0 {

@@ -16,8 +16,8 @@ type Config struct {
 	Mode      string           `json:"mode"`      // "load_balance" 或 "fallback"
 	Algorithm string           `json:"algorithm"` // "round_robin", "weighted_round_robin", "random"
 	Servers   []UpstreamServer `json:"servers"`
-	Fallback  bool             `json:"fallback"`   // 向后兼容字段
-	Auth      bool             `json:"auth"`       // 是否启用鉴权
-	AuthKeys  []string         `json:"auth_keys"`  // 允许的 API Key 列表
-	Cooldown  int              `json:"cooldown"`   // 冷却时间（秒）
+	Fallback  bool             `json:"fallback"`  // 向后兼容字段
+	Auth      bool             `json:"auth"`      // 是否启用鉴权
+	AuthKeys  []string         `json:"auth_keys"` // 允许的 API Key 列表
+	Cooldown  int              `json:"cooldown"`  // 冷却时间（秒）
 }

@@ -57,7 +57,7 @@ func main() {
 		if port == "" {
 			port = "3000"
 		}
-		
+
 		client := &http.Client{Timeout: 3 * time.Second}
 		resp, err := client.Get(fmt.Sprintf("http://localhost:%s/health", port))
 		if err != nil || resp.StatusCode != http.StatusOK {
