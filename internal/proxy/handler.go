@@ -94,9 +94,10 @@ func tryRequest(c *gin.Context, server *types.UpstreamServer, balancer *balance.
 	}
 
 	for key, values := range c.Request.Header {
-		if strings.ToLower(key) == "authorization" {
+		lowerKey := strings.ToLower(key)
+		if lowerKey == "authorization" {
 			req.Header.Set(key, "Bearer "+server.Token)
-		} else if strings.ToLower(key) != "host" {
+		} else if lowerKey != "host" && lowerKey != "connection" && lowerKey != "upgrade" && lowerKey != "proxy-connection" {
 			for _, value := range values {
 				req.Header.Add(key, value)
 			}
