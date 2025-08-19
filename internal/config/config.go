@@ -35,7 +35,14 @@ func LoadWithPath(configPath string) types.Config {
 	}
 
 	log.Printf("Loading configuration format")
-	return applyDefaults(config)
+	config = applyDefaults(config)
+	
+	// 设置日志 debug 模式
+	if config.Debug {
+		log.Printf("Debug mode enabled")
+	}
+	
+	return config
 }
 
 // applyDefaults 应用默认值并验证配置
@@ -113,7 +120,7 @@ func applyDefaults(config types.Config) types.Config {
 		log.Fatal("Authentication enabled but no auth_keys specified")
 	}
 
-	log.Printf("Configuration loaded: mode=%s, algorithm=%s", config.Mode, config.Algorithm)
+	log.Printf("Configuration loaded: mode=%s, algorithm=%s, debug=%t", config.Mode, config.Algorithm, config.Debug)
 	return config
 }
 

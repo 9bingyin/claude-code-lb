@@ -52,6 +52,9 @@ func main() {
 	// 加载配置
 	cfg := config.LoadWithPath(*configFile)
 
+	// 设置日志 debug 模式
+	logger.SetDebugMode(cfg.Debug)
+
 	// 创建负载均衡器
 	balancer := balance.New(cfg)
 
@@ -60,6 +63,9 @@ func main() {
 
 	// 创建健康检查器
 	healthChecker := health.NewChecker(cfg, balancer)
+
+	// 创建余额查询器
+	balanceChecker := balance.NewBalanceChecker(cfg, balancer)
 
 	// 设置 Gin 为发布模式，关闭调试日志
 	gin.SetMode(gin.ReleaseMode)
@@ -80,13 +86,16 @@ func main() {
 	r.GET("/health", health.Handler(cfg, balancer))
 
 	// 在需要鉴权的路由上应用鉴权中间件和代理处理
-	r.Any("/v1/*path", auth.Middleware(cfg), proxy.Handler(balancer, statsReporter))
+	r.Any("/v1/*path", auth.Middleware(cfg), proxy.Handler(balancer, statsReporter, cfg.Debug))
 
 	// 启动被动健康检查（自动恢复冷却期过期的服务器）
 	go healthChecker.PassiveHealthCheck()
 
 	// 启动统计报告器
 	go statsReporter.StartReporter()
+
+	// 启动余额查询器
+	go balanceChecker.Start()
 
 	port := cfg.Port
 	if port == "" {
@@ -97,7 +106,7 @@ func main() {
 	logger.Info("BOOT", "Version: %s (commit: %s, built: %s)", version, commit, date)
 	logger.Info("BOOT", "Starting server on port %s", port)
 	logger.Info("BOOT", "Load balancer: %s (%d servers)", cfg.Algorithm, len(cfg.Servers))
-	logger.Info("BOOT", "Fallback: %t | Circuit breaker: %ds", cfg.Fallback, cfg.Cooldown)
+	logger.Info("BOOT", "Fallback: %t | Circuit breaker: %ds | Debug: %t", cfg.Fallback, cfg.Cooldown, cfg.Debug)
 	logger.Info("BOOT", "Health check: passive (auto-recovery after cooldown)")
 	logger.Info("BOOT", "Authentication: %t", cfg.Auth)
 	if cfg.Auth {

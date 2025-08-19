@@ -21,6 +21,12 @@ const (
 )
 
 var logMutex sync.Mutex
+var debugEnabled bool
+
+// SetDebugMode 设置调试模式
+func SetDebugMode(enabled bool) {
+	debugEnabled = enabled
+}
 
 func formatTimestamp() string {
 	return time.Now().Format("15:04:05.000")
@@ -68,4 +74,16 @@ func Auth(success bool, message string, args ...interface{}) {
 	} else {
 		Error("AUTH", message, args...)
 	}
+}
+
+func Debug(category string, message string, args ...interface{}) {
+	if !debugEnabled {
+		return
+	}
+	logMutex.Lock()
+	defer logMutex.Unlock()
+	timestamp := formatTimestamp()
+	categoryFormatted := fmt.Sprintf("%s%5s%s", ColorPurple, category, ColorReset)
+	message = fmt.Sprintf(message, args...)
+	log.Printf("%s [%s] %s", timestamp, categoryFormatted, message)
 }
