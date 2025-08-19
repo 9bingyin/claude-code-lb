@@ -61,17 +61,92 @@ func formatRequestURL(method, serverURL, path, query string) string {
 
 // parseUsageInfo 解析响应体中的 usage 信息
 func parseUsageInfo(responseBody []byte, contentType string) (model string, usage types.ClaudeUsage, success bool) {
-	// 只处理 JSON 响应
-	if !strings.Contains(strings.ToLower(contentType), "application/json") {
-		return "", types.ClaudeUsage{}, false
+	contentTypeLower := strings.ToLower(contentType)
+
+	// 处理 JSON 格式响应
+	if strings.Contains(contentTypeLower, "application/json") {
+		var response types.ClaudeResponse
+		if err := json.Unmarshal(responseBody, &response); err != nil {
+			return "", types.ClaudeUsage{}, false
+		}
+		return response.Model, response.Usage, true
 	}
 
-	var response types.ClaudeResponse
-	if err := json.Unmarshal(responseBody, &response); err != nil {
-		return "", types.ClaudeUsage{}, false
+	// 处理 Server-Sent Events (SSE) 格式响应
+	if strings.Contains(contentTypeLower, "text/event-stream") {
+		return parseSSEUsageInfo(responseBody)
 	}
 
-	return response.Model, response.Usage, true
+	return "", types.ClaudeUsage{}, false
+}
+
+// parseSSEUsageInfo 解析 SSE 格式响应中的 usage 信息
+func parseSSEUsageInfo(responseBody []byte) (model string, usage types.ClaudeUsage, success bool) {
+	lines := strings.Split(string(responseBody), "\n")
+
+	for _, line := range lines {
+		// 查找 message_start 或 message_delta 事件
+		if dataJSON, ok := strings.CutPrefix(line, "data: "); ok {
+			dataJSON = strings.TrimSpace(dataJSON)
+
+			// 跳过空行和 ping 消息
+			if dataJSON == "" || strings.Contains(dataJSON, `"type": "ping"`) {
+				continue
+			}
+
+			var eventData map[string]any
+			if err := json.Unmarshal([]byte(dataJSON), &eventData); err != nil {
+				continue
+			}
+
+			// 检查是否是 message_start 或 message_delta 事件
+			eventType, ok := eventData["type"].(string)
+			if !ok {
+				continue
+			}
+
+			switch eventType {
+			case "message_start":
+				if message, ok := eventData["message"].(map[string]any); ok {
+					if modelValue, ok := message["model"].(string); ok {
+						model = modelValue
+					}
+					if usageData, ok := message["usage"].(map[string]any); ok {
+						usage = parseUsageFromMap(usageData)
+						success = true
+					}
+				}
+			case "message_delta":
+				if usageData, ok := eventData["usage"].(map[string]any); ok {
+					// message_delta 中的 usage 是最终数据，覆盖之前的值
+					usage = parseUsageFromMap(usageData)
+					success = true
+				}
+			}
+		}
+	}
+
+	return model, usage, success
+}
+
+// parseUsageFromMap 从 map 中解析 usage 信息
+func parseUsageFromMap(usageData map[string]any) types.ClaudeUsage {
+	var usage types.ClaudeUsage
+
+	if inputTokens, ok := usageData["input_tokens"].(float64); ok {
+		usage.InputTokens = int(inputTokens)
+	}
+	if outputTokens, ok := usageData["output_tokens"].(float64); ok {
+		usage.OutputTokens = int(outputTokens)
+	}
+	if cacheCreateTokens, ok := usageData["cache_creation_input_tokens"].(float64); ok {
+		usage.CacheCreationInputTokens = int(cacheCreateTokens)
+	}
+	if cacheReadTokens, ok := usageData["cache_read_input_tokens"].(float64); ok {
+		usage.CacheReadInputTokens = int(cacheReadTokens)
+	}
+
+	return usage
 }
 
 func Handler(balancer *balance.Balancer, statsReporter *stats.Reporter, debugMode bool) gin.HandlerFunc {
