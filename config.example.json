@@ -2,6 +2,7 @@
   "port": "3000",
   "mode": "load_balance",
   "algorithm": "weighted_round_robin",
+  "debug": false,
   "servers": [
     {
       "url": "https://api.primary-server.com",

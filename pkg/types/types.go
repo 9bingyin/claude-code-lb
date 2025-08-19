@@ -20,4 +20,18 @@ type Config struct {
 	Auth      bool             `json:"auth"`      // 是否启用鉴权
 	AuthKeys  []string         `json:"auth_keys"` // 允许的 API Key 列表
 	Cooldown  int              `json:"cooldown"`  // 冷却时间（秒）
+	Debug     bool             `json:"debug"`     // 是否启用调试模式
+}
+
+// Claude API 响应结构（用于解析 usage 信息）
+type ClaudeUsage struct {
+	InputTokens             int `json:"input_tokens"`
+	OutputTokens            int `json:"output_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens    int `json:"cache_read_input_tokens"`
+}
+
+type ClaudeResponse struct {
+	Model string      `json:"model"`
+	Usage ClaudeUsage `json:"usage"`
 }
