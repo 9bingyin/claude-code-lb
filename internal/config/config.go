@@ -36,12 +36,12 @@ func LoadWithPath(configPath string) types.Config {
 
 	log.Printf("Loading configuration format")
 	config = applyDefaults(config)
-	
+
 	// 设置日志 debug 模式
 	if config.Debug {
 		log.Printf("Debug mode enabled")
 	}
-	
+
 	return config
 }
 
