@@ -179,7 +179,7 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 		}
 		responseBody = bodyBytes
 		responseReader = bytes.NewReader(bodyBytes)
-		
+
 		// 记录完整原始响应
 		logger.Debug("PROXY", "Raw response body:\n%s", string(responseBody))
 	}
@@ -187,7 +187,7 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 	// 检查响应状态，如果是5xx错误或429速率限制，标记服务器为不可用
 	if resp.StatusCode >= 500 || resp.StatusCode == 429 {
 		var errorDetail string
-		
+
 		if debugMode && responseBody != nil {
 			// debug 模式下已经读取了响应体
 			errorDetail = strings.TrimSpace(string(responseBody))
@@ -200,7 +200,7 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 				errorDetail = strings.TrimSpace(string(bodyBytes))
 			}
 		}
-		
+
 		// 清理换行符，使日志更紧凑
 		errorDetail = strings.ReplaceAll(errorDetail, "\n", " ")
 		errorDetail = strings.ReplaceAll(errorDetail, "\r", "")
@@ -235,7 +235,7 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 		var model string
 		var usage types.ClaudeUsage
 		var parseSuccess bool
-		
+
 		if debugMode && responseBody != nil {
 			// debug 模式下直接使用已读取的响应体
 			model, usage, parseSuccess = parseUsageInfo(responseBody, resp.Header.Get("Content-Type"))
@@ -249,10 +249,10 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 				}
 			}
 		}
-		
+
 		if parseSuccess && model != "" {
-			logger.Success("PROXY", "Success: %s | Status: %d (%dms) | Model: %s | Input: %d | Output: %d | Cache Create: %d | Cache Read: %d", 
-				fullRequestURL, resp.StatusCode, responseTime.Milliseconds(), 
+			logger.Success("PROXY", "Success: %s | Status: %d (%dms) | Model: %s | Input: %d | Output: %d | Cache Create: %d | Cache Read: %d",
+				fullRequestURL, resp.StatusCode, responseTime.Milliseconds(),
 				model, usage.InputTokens, usage.OutputTokens, usage.CacheCreationInputTokens, usage.CacheReadInputTokens)
 		} else {
 			logger.Success("PROXY", "Success: %s | Status: %d (%dms)", fullRequestURL, resp.StatusCode, responseTime.Milliseconds())

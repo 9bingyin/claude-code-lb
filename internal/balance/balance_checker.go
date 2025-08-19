@@ -76,11 +76,11 @@ func (bc *BalanceChecker) Start() {
 // Stop 停止余额查询
 func (bc *BalanceChecker) Stop() {
 	close(bc.stopChan)
-	
+
 	// 停止所有服务器的定时器
 	bc.mutex.Lock()
 	defer bc.mutex.Unlock()
-	
+
 	for _, timer := range bc.serverTimers {
 		timer.Stop()
 	}
@@ -93,21 +93,21 @@ func (bc *BalanceChecker) startServerBalanceCheck(server types.UpstreamServer) {
 	if interval <= 0 {
 		interval = 300
 	}
-	
+
 	logger.Info("MONEY", "Starting balance check for %s: interval %d seconds", server.URL, interval)
-	
+
 	// 立即执行一次查询
 	go bc.checkServerBalance(server)
-	
+
 	// 启动定时器
 	go func(s types.UpstreamServer, intervalSeconds int) {
 		ticker := time.NewTicker(time.Duration(intervalSeconds) * time.Second)
 		defer ticker.Stop()
-		
+
 		bc.mutex.Lock()
 		bc.serverTimers[s.URL] = &time.Timer{} // 存储引用（实际由ticker管理）
 		bc.mutex.Unlock()
-		
+
 		for {
 			select {
 			case <-ticker.C:
@@ -122,16 +122,16 @@ func (bc *BalanceChecker) startServerBalanceCheck(server types.UpstreamServer) {
 // checkServerBalance 检查单个服务器的余额
 func (bc *BalanceChecker) checkServerBalance(server types.UpstreamServer) {
 	startTime := time.Now()
-	
+
 	balance, err := bc.executeBalanceCommand(server.BalanceCheck)
-	
+
 	bc.mutex.Lock()
 	defer bc.mutex.Unlock()
-	
+
 	balanceInfo := &BalanceInfo{
 		LastChecked: startTime,
 	}
-	
+
 	if err != nil {
 		balanceInfo.Status = "error"
 		balanceInfo.Error = err.Error()
@@ -140,25 +140,25 @@ func (bc *BalanceChecker) checkServerBalance(server types.UpstreamServer) {
 	} else {
 		balanceInfo.Status = "success"
 		balanceInfo.Balance = balance
-		
+
 		// 获取余额阈值，默认为0（即余额小于等于0时才标记为不可用）
 		threshold := server.BalanceThreshold
 		// 注意：Go中float64零值就是0，所以这里不需要额外处理
-		
+
 		// 检查余额是否低于或等于阈值
 		if balance <= threshold {
-			logger.Warning("MONEY", "Balance insufficient for %s: %.2f <= %.2f (marking as down)", 
+			logger.Warning("MONEY", "Balance insufficient for %s: %.2f <= %.2f (marking as down)",
 				server.URL, balance, threshold)
 			// 标记服务器为不可用
 			if bc.balancer != nil {
 				bc.balancer.MarkServerDown(server.URL)
 			}
 		} else {
-			logger.Success("MONEY", "Balance for %s: %.2f (checked in %dms)", 
+			logger.Success("MONEY", "Balance for %s: %.2f (checked in %dms)",
 				server.URL, balance, time.Since(startTime).Milliseconds())
 		}
 	}
-	
+
 	bc.balances[server.URL] = balanceInfo
 }
 
@@ -166,22 +166,22 @@ func (bc *BalanceChecker) checkServerBalance(server types.UpstreamServer) {
 func (bc *BalanceChecker) executeBalanceCommand(command string) (float64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), bc.commandTimeout)
 	defer cancel()
-	
+
 	// 使用 bash -c 来执行命令，支持管道等复杂命令
 	cmd := exec.CommandContext(ctx, "bash", "-c", command)
-	
+
 	output, err := cmd.Output()
 	if err != nil {
 		return 0, err
 	}
-	
+
 	// 解析输出为数字
 	balanceStr := strings.TrimSpace(string(output))
 	balance, err := strconv.ParseFloat(balanceStr, 64)
 	if err != nil {
 		return 0, err
 	}
-	
+
 	return balance, nil
 }
 
@@ -189,7 +189,7 @@ func (bc *BalanceChecker) executeBalanceCommand(command string) (float64, error)
 func (bc *BalanceChecker) GetBalance(serverURL string) *BalanceInfo {
 	bc.mutex.RLock()
 	defer bc.mutex.RUnlock()
-	
+
 	if info, exists := bc.balances[serverURL]; exists {
 		// 创建副本避免并发问题
 		return &BalanceInfo{
@@ -199,7 +199,7 @@ func (bc *BalanceChecker) GetBalance(serverURL string) *BalanceInfo {
 			Error:       info.Error,
 		}
 	}
-	
+
 	return &BalanceInfo{
 		Status: "unknown",
 	}
@@ -209,7 +209,7 @@ func (bc *BalanceChecker) GetBalance(serverURL string) *BalanceInfo {
 func (bc *BalanceChecker) GetAllBalances() map[string]*BalanceInfo {
 	bc.mutex.RLock()
 	defer bc.mutex.RUnlock()
-	
+
 	result := make(map[string]*BalanceInfo)
 	for url, info := range bc.balances {
 		result[url] = &BalanceInfo{
@@ -219,6 +219,6 @@ func (bc *BalanceChecker) GetAllBalances() map[string]*BalanceInfo {
 			Error:       info.Error,
 		}
 	}
-	
+
 	return result
 }
