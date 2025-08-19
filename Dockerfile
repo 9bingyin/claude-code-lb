@@ -28,7 +28,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o claude-code-lb .
 
 # Create data directory structure
-RUN mkdir -p /tmp/data && chown 65534:65534 /tmp/data
+RUN mkdir -p /tmp/data
 
 # Final stage - Alpine Linux with balance check tools
 FROM alpine:latest
@@ -51,14 +51,15 @@ RUN apk add --no-cache \
 # Copy the compiled binary
 COPY --from=builder /app/claude-code-lb /claude-code-lb
 
-# Create data directory for configuration
-COPY --from=builder --chown=65534:65534 /tmp/data /data
+# Create data directory for configuration  
+COPY --from=builder /tmp/data /data
 
-# Create a non-root user for security
-RUN adduser -D -s /bin/bash -u 65534 appuser
+# Create a non-root user for security (use available UID)
+RUN adduser -D -s /bin/bash appuser
 
-# Change ownership of the binary to the app user
-RUN chown appuser:appuser /claude-code-lb
+# Change ownership of files to the app user
+RUN chown appuser:appuser /claude-code-lb && \
+    chown -R appuser:appuser /data
 
 # Switch to non-root user
 USER appuser
