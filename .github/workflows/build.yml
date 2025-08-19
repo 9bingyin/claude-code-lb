@@ -10,13 +10,6 @@ on:
       - '.github/workflows/**'
       - 'Dockerfile'
       - '.dockerignore'
-    paths-ignore:
-      - 'README.md'
-      - '**/*.md'
-      - 'config.example.json'
-      - 'LICENSE'
-      - '.gitignore'
-      - '.gitattributes'
   pull_request:
     branches: [ main ]
     paths:
@@ -26,13 +19,6 @@ on:
       - '.github/workflows/**'
       - 'Dockerfile'
       - '.dockerignore'
-    paths-ignore:
-      - 'README.md'
-      - '**/*.md'
-      - 'config.example.json'
-      - 'LICENSE'
-      - '.gitignore'
-      - '.gitattributes'
   workflow_dispatch:
 
 permissions:
