@@ -2,8 +2,7 @@
 
 高性能的 Claude API 负载均衡器，支持多种分发策略、故障转移和健康检查功能。
 
-[![Build](https://github.com/your-username/claude-code-lb/actions/workflows/build.yml/badge.svg)](https://github.com/your-username/claude-code-lb/actions/workflows/build.yml)
-[![Docker](https://github.com/your-username/claude-code-lb/actions/workflows/docker.yml/badge.svg)](https://github.com/your-username/claude-code-lb/actions/workflows/docker.yml)
+[![Build](https://github.com/9bingyin/claude-code-lb/actions/workflows/build.yml/badge.svg)](https://github.com/9bingyin/claude-code-lb/actions/workflows/build.yml) [![Docker](https://github.com/9bingyin/claude-code-lb/actions/workflows/docker.yml/badge.svg)](https://github.com/9bingyin/claude-code-lb/actions/workflows/docker.yml)
 
 ## 功能特性
 
@@ -18,50 +17,58 @@
 
 ## 快速开始
 
-### 方式 1: 使用二进制文件
+### 方式 1: 从 GitHub Actions 下载构建产物
 
-1. **下载二进制文件**
-   ```bash
-   # 从 GitHub Releases 下载适合你系统的版本
-   wget https://github.com/your-username/claude-code-lb/releases/latest/download/claude-code-lb-linux-amd64
-   chmod +x claude-code-lb-linux-amd64
-   mv claude-code-lb-linux-amd64 /usr/local/bin/claude-code-lb
-   ```
+1. **访问 Actions 页面**: 前往 [https://github.com/9bingyin/claude-code-lb/actions](https://github.com/9bingyin/claude-code-lb/actions)
+2. **选择 `Build` 工作流**: 在左侧选择 "Build" 工作流。
+3. **下载构建产物**: 从列表中选择一个最近成功运行的工作流，在页面底部的 "Artifacts" 部分下载适用于您系统的压缩包。
 
 2. **创建配置文件**
    ```bash
-   curl -o config.json https://raw.githubusercontent.com/your-username/claude-code-lb/main/config.example.json
+   curl -o config.json https://raw.githubusercontent.com/9bingyin/claude-code-lb/main/config.example.json
    ```
 
 3. **编辑配置并运行**
    ```bash
-   vim config.json  # 编辑配置
-   claude-code-lb   # 启动服务
+   # 解压下载的产物后，为其添加执行权限并移动到 PATH
+   chmod +x claude-code-lb-linux-amd64
+   mv claude-code-lb-linux-amd64 /usr/local/bin/claude-code-lb
+   
+   # 编辑配置
+   vim config.json
+   
+   # 启动服务
+   claude-code-lb
    ```
 
 ### 方式 2: 使用 Docker
 
 ```bash
 # 拉取镜像
-docker pull ghcr.io/your-username/claude-code-lb:latest
+docker pull ghcr.io/9bingyin/claude-code-lb:dev
 
 # 运行容器
+# 请确保当前目录下有 config.json 文件
 docker run -d \
-  --name claude-lb \
+  --name claude-code-lb \
   -p 3000:3000 \
-  -v ./config.json:/config.json \
-  ghcr.io/your-username/claude-code-lb:latest
+  -v $(pwd):/data \
+  ghcr.io/9bingyin/claude-code-lb:dev
 ```
 
 ### 方式 3: 从源码构建
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-username/claude-code-lb.git
+git clone https://github.com/9bingyin/claude-code-lb.git
 cd claude-code-lb
 
 # 安装依赖
 go mod download
+
+# 构建二进制文件
+# 这会在当前目录生成一个名为 claude-code-lb 的可执行文件
+go build -o claude-code-lb .
 
 # 复制配置文件
 cp config.example.json config.json
@@ -70,7 +77,7 @@ cp config.example.json config.json
 vim config.json
 
 # 运行服务
-go run main.go
+./claude-code-lb
 ```
 
 ## 配置文档
@@ -126,6 +133,22 @@ go run main.go
 - **建议**: 强烈推荐设置以提高安全性
 - **示例**: `"sk-your-token-here"`
 
+##### `balance_check` (字符串, 可选)
+- **说明**: 用于检查服务器账户余额的 shell 命令。该命令的输出必须是一个纯数字。
+- **功能**: 如果命令输出的余额小于或等于 `balance_threshold`，服务器将被自动标记为不可用。
+- **依赖**: `Dockerfile` 中已包含 `curl`, `jq`, `bash` 等常用工具。
+- **示例**: `"curl -s -H 'Authorization: Bearer sk-token' https://api.example.com/v1/balance | jq .balance"`
+
+##### `balance_check_interval` (数字, 可选)
+- **说明**: 余额检查命令的执行间隔时间（秒）。
+- **默认值**: `300` (5分钟)
+- **示例**: `180`
+
+##### `balance_threshold` (数字, 可选)
+- **说明**: 余额阈值。当余额小于或等于此值时，服务器将被禁用。
+- **默认值**: `0`
+- **示例**: `10.0`
+
 ### 故障处理
 
 #### `cooldown` (数字)
@@ -163,21 +186,28 @@ go run main.go
   "port": "3000",
   "mode": "load_balance",
   "algorithm": "weighted_round_robin",
+  "debug": false,
   "servers": [
     {
-      "url": "https://api1.com",
+      "url": "https://api.primary-server.com",
       "weight": 5,
-      "token": "sk-token-1"
+      "token": "sk-primary-token-here",
+      "balance_check": "curl -s -H 'Authorization: Bearer sk-primary-token-here' https://api.primary-server.com/balance",
+      "balance_check_interval": 180,
+      "balance_threshold": 10.0
     },
     {
-      "url": "https://api2.com", 
+      "url": "https://api.secondary-server.com",
       "weight": 3,
-      "token": "sk-token-2"
+      "token": "sk-secondary-token-here",
+      "balance_check": "curl -s -H 'Authorization: Bearer sk-secondary-token-here' https://api.secondary-server.com/v1/account/balance | jq -r '.balance'",
+      "balance_check_interval": 600,
+      "balance_threshold": 5.0
     },
     {
-      "url": "https://api3.com",
+      "url": "https://api.backup-server.com",
       "weight": 1,
-      "token": "sk-token-3"
+      "token": "sk-backup-token-here"
     }
   ],
   "auth": false,
@@ -240,34 +270,8 @@ claude-code-lb [选项]
 
 ```bash
 export ANTHROPIC_API_URL="http://localhost:3000"
+export ANTHROPIC_AUTH_TOKEN="sk-xxx"
 ```
-
-### API 端点
-
-- `GET /health` - 服务健康状态和统计信息
-- `ANY /v1/*` - 代理所有 Claude API 请求
-
-健康检查响应示例：
-```json
-{
-  "status": "ok",
-  "total_servers": 3,
-  "available_servers": 2,
-  "load_balancer": "weighted_round_robin",
-  "mode": "load_balance",
-  "time": "2025-08-18T08:30:00Z"
-}
-```
-
-## 工作模式对比
-
-| 特性 | 负载均衡模式 | 故障转移模式 |
-|------|-------------|-------------|
-| 服务器选择策略 | 按算法分配到所有健康服务器 | 严格按优先级选择 |
-| 流量分配 | 平衡分配 | 集中到最高优先级服务器 |
-| 适用场景 | 高并发、性能优化 | 主备切换、灾难恢复 |
-| 算法支持 | 轮询、加权轮询、随机 | 优先级排序 |
-| 配置复杂度 | 中等 (需要调整权重) | 简单 (设置优先级) |
 
 ## 开发和构建
 
@@ -305,31 +309,6 @@ docker build -t claude-code-lb .
 docker buildx build --platform linux/amd64,linux/arm64 -t claude-code-lb .
 ```
 
-## 安全建议
-
-1. **生产环境配置**
-   ```bash
-   export GIN_MODE=release
-   ```
-
-2. **启用身份验证**
-   ```json
-   {
-     "auth": true,
-     "auth_keys": ["your-secure-key"]
-   }
-   ```
-
-3. **网络安全**
-   - 使用防火墙限制访问
-   - 配置 HTTPS (建议在反向代理层)
-   - 定期轮换 API Token
-
-4. **监控建议**
-   - 监控 `/health` 端点
-   - 设置日志聚合
-   - 配置告警机制
-
 ## 监控和日志
 
 服务提供详细的日志输出和统计信息：
@@ -338,21 +317,3 @@ docker buildx build --platform linux/amd64,linux/arm64 -t claude-code-lb .
 - **请求日志**: 记录每个代理请求的详细信息
 - **错误日志**: 记录故障服务器和错误信息
 - **统计报告**: 定期输出请求统计和响应时间
-
-## 贡献
-
-欢迎提交 Issues 和 Pull Requests！
-
-1. Fork 这个项目
-2. 创建你的特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交你的修改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 提交 Pull Request
-
-## 许可证
-
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
-
----
-
-**需要帮助？** 查看 [Issues](https://github.com/your-username/claude-code-lb/issues) 或创建新的问题。

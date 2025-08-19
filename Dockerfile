@@ -73,7 +73,7 @@ EXPOSE 3000
 # Labels for better container management
 LABEL org.opencontainers.image.title="Claude Code Load Balancer" \
       org.opencontainers.image.description="A high-performance load balancer for Claude API endpoints with balance checking support" \
-      org.opencontainers.image.source="https://github.com/your-username/claude-code-lb" \
+      org.opencontainers.image.source="https://github.com/9bingyin/claude-code-lb" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${COMMIT}" \
       org.opencontainers.image.created="${DATE}" \
