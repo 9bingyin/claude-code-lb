@@ -64,6 +64,9 @@ func main() {
 	// 创建健康检查器
 	healthChecker := health.NewChecker(cfg, balancer)
 
+	// 创建余额查询器
+	balanceChecker := balance.NewBalanceChecker(cfg, balancer)
+
 	// 设置 Gin 为发布模式，关闭调试日志
 	gin.SetMode(gin.ReleaseMode)
 
@@ -90,6 +93,9 @@ func main() {
 
 	// 启动统计报告器
 	go statsReporter.StartReporter()
+
+	// 启动余额查询器
+	go balanceChecker.Start()
 
 	port := cfg.Port
 	if port == "" {

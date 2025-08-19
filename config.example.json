@@ -8,13 +8,19 @@
       "url": "https://api.primary-server.com",
       "weight": 5,
       "priority": 1,
-      "token": "sk-primary-token-here"
+      "token": "sk-primary-token-here",
+      "balance_check": "curl -s -H 'Authorization: Bearer sk-primary-token-here' https://api.primary-server.com/balance",
+      "balance_check_interval": 180,
+      "balance_threshold": 10.0
     },
     {
       "url": "https://api.secondary-server.com",
       "weight": 3,
       "priority": 2,
-      "token": "sk-secondary-token-here"
+      "token": "sk-secondary-token-here",
+      "balance_check": "curl -s -H 'Authorization: Bearer sk-secondary-token-here' https://api.secondary-server.com/v1/account/balance | jq -r '.balance'",
+      "balance_check_interval": 600,
+      "balance_threshold": 5.0
     },
     {
       "url": "https://api.backup-server.com",
