@@ -7,18 +7,32 @@ on:
       - '**.go'
       - 'go.mod'
       - 'go.sum'
-      - '.github/workflows/build.yml'
+      - '.github/workflows/**'
       - 'Dockerfile'
       - '.dockerignore'
+    paths-ignore:
+      - 'README.md'
+      - '**/*.md'
+      - 'config.example.json'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.gitattributes'
   pull_request:
     branches: [ main ]
     paths:
       - '**.go'
       - 'go.mod'
       - 'go.sum'
-      - '.github/workflows/build.yml'
+      - '.github/workflows/**'
       - 'Dockerfile'
       - '.dockerignore'
+    paths-ignore:
+      - 'README.md'
+      - '**/*.md'
+      - 'config.example.json'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.gitattributes'
   workflow_dispatch:
 
 permissions:
