@@ -3,6 +3,7 @@ package selector
 import (
 	"testing"
 
+	"claude-code-lb/internal/testutil"
 	"claude-code-lb/pkg/types"
 )
 
@@ -10,9 +11,9 @@ func TestNewLoadBalancer(t *testing.T) {
 	config := types.Config{
 		Algorithm: "round_robin",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1", Weight: 1},
-			{URL: "https://api2.example.com", Token: "token2", Weight: 2},
-			{URL: "https://api3.example.com", Token: "token3", Weight: 0}, // Should default to 1
+			{URL: testutil.API1ExampleURL, Token: testutil.TestToken1, Weight: 1},
+			{URL: testutil.API2ExampleURL, Token: "token2", Weight: 2},
+			{URL: testutil.API3ExampleURL, Token: "token3", Weight: 0}, // Should default to 1
 		},
 	}
 
@@ -36,14 +37,14 @@ func TestNewLoadBalancer(t *testing.T) {
 	}
 
 	// Check that weights are properly set
-	if lb.serverWeights["https://api1.example.com"] != 1 {
-		t.Errorf("Expected weight 1 for api1, got %d", lb.serverWeights["https://api1.example.com"])
+	if lb.serverWeights[testutil.API1ExampleURL] != 1 {
+		t.Errorf("Expected weight 1 for api1, got %d", lb.serverWeights[testutil.API1ExampleURL])
 	}
-	if lb.serverWeights["https://api2.example.com"] != 2 {
-		t.Errorf("Expected weight 2 for api2, got %d", lb.serverWeights["https://api2.example.com"])
+	if lb.serverWeights[testutil.API2ExampleURL] != 2 {
+		t.Errorf("Expected weight 2 for api2, got %d", lb.serverWeights[testutil.API2ExampleURL])
 	}
-	if lb.serverWeights["https://api3.example.com"] != 1 {
-		t.Errorf("Expected weight 1 for api3 (default), got %d", lb.serverWeights["https://api3.example.com"])
+	if lb.serverWeights[testutil.API3ExampleURL] != 1 {
+		t.Errorf("Expected weight 1 for api3 (default), got %d", lb.serverWeights[testutil.API3ExampleURL])
 	}
 }
 
@@ -51,8 +52,8 @@ func TestLoadBalancerSelectServer(t *testing.T) {
 	config := types.Config{
 		Algorithm: "round_robin",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1"},
-			{URL: "https://api2.example.com", Token: "token2"},
+			{URL: testutil.API1ExampleURL, Token: testutil.TestToken1},
+			{URL: testutil.API2ExampleURL, Token: "token2"},
 		},
 	}
 
@@ -86,29 +87,29 @@ func TestLoadBalancerMarkServerDown(t *testing.T) {
 		Algorithm: "round_robin",
 		Cooldown:  60,
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1"},
-			{URL: "https://api2.example.com", Token: "token2"},
+			{URL: testutil.API1ExampleURL, Token: testutil.TestToken1},
+			{URL: testutil.API2ExampleURL, Token: "token2"},
 		},
 	}
 
 	lb := NewLoadBalancer(config)
 
 	// Mark server as down
-	lb.MarkServerDown("https://api1.example.com")
+	lb.MarkServerDown(testutil.API1ExampleURL)
 
 	// Check status
 	status := lb.GetServerStatus()
-	if status["https://api1.example.com"] {
+	if status[testutil.API1ExampleURL] {
 		t.Error("Server should be marked as down")
 	}
-	if !status["https://api2.example.com"] {
+	if !status[testutil.API2ExampleURL] {
 		t.Error("Server should still be available")
 	}
 
 	// Check that DownUntil is set
 	found := false
 	for _, server := range config.Servers {
-		if server.URL == "https://api1.example.com" {
+		if server.URL == testutil.API1ExampleURL {
 			if server.DownUntil.IsZero() {
 				t.Error("DownUntil should be set for downed server")
 			}
@@ -125,27 +126,27 @@ func TestLoadBalancerMarkServerHealthy(t *testing.T) {
 	config := types.Config{
 		Algorithm: "round_robin",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1"},
+			{URL: testutil.API1ExampleURL, Token: testutil.TestToken1},
 		},
 	}
 
 	lb := NewLoadBalancer(config)
 
 	// First mark it down
-	lb.MarkServerDown("https://api1.example.com")
-	
+	lb.MarkServerDown(testutil.API1ExampleURL)
+
 	// Then mark it healthy
-	lb.MarkServerHealthy("https://api1.example.com")
+	lb.MarkServerHealthy(testutil.API1ExampleURL)
 
 	// Check status
 	status := lb.GetServerStatus()
-	if !status["https://api1.example.com"] {
+	if !status[testutil.API1ExampleURL] {
 		t.Error("Server should be marked as healthy")
 	}
 
 	// Check that failure count is reset
-	if lb.failureCount["https://api1.example.com"] != 0 {
-		t.Errorf("Failure count should be reset to 0, got %d", lb.failureCount["https://api1.example.com"])
+	if lb.failureCount[testutil.API1ExampleURL] != 0 {
+		t.Errorf("Failure count should be reset to 0, got %d", lb.failureCount[testutil.API1ExampleURL])
 	}
 }
 
@@ -153,9 +154,9 @@ func TestLoadBalancerGetAvailableServers(t *testing.T) {
 	config := types.Config{
 		Algorithm: "round_robin",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1"},
-			{URL: "https://api2.example.com", Token: "token2"},
-			{URL: "https://api3.example.com", Token: "token3"},
+			{URL: testutil.API1ExampleURL, Token: testutil.TestToken1},
+			{URL: testutil.API2ExampleURL, Token: "token2"},
+			{URL: testutil.API3ExampleURL, Token: "token3"},
 		},
 	}
 
@@ -168,7 +169,7 @@ func TestLoadBalancerGetAvailableServers(t *testing.T) {
 	}
 
 	// Mark one server as down
-	lb.MarkServerDown("https://api2.example.com")
+	lb.MarkServerDown(testutil.API1ExampleURL)
 
 	// Now should have 2 available servers
 	available = lb.GetAvailableServers()
@@ -178,7 +179,7 @@ func TestLoadBalancerGetAvailableServers(t *testing.T) {
 
 	// Check that the down server is not in the list
 	for _, server := range available {
-		if server.URL == "https://api2.example.com" {
+		if server.URL == testutil.API1ExampleURL {
 			t.Error("Down server should not be in available servers list")
 		}
 	}
@@ -189,27 +190,27 @@ func TestLoadBalancerRecoverServer(t *testing.T) {
 		Algorithm: "round_robin",
 		Cooldown:  60,
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1"},
+			{URL: testutil.API1ExampleURL, Token: testutil.TestToken1},
 		},
 	}
 
 	lb := NewLoadBalancer(config)
 
 	// Mark server as down
-	lb.MarkServerDown("https://api1.example.com")
+	lb.MarkServerDown(testutil.API1ExampleURL)
 
 	// Verify it's down
 	status := lb.GetServerStatus()
-	if status["https://api1.example.com"] {
+	if status[testutil.API1ExampleURL] {
 		t.Error("Server should be down")
 	}
 
 	// Recover the server
-	lb.RecoverServer("https://api1.example.com")
+	lb.RecoverServer(testutil.API1ExampleURL)
 
 	// Verify it's back up
 	status = lb.GetServerStatus()
-	if !status["https://api1.example.com"] {
+	if !status[testutil.API1ExampleURL] {
 		t.Error("Server should be recovered")
 	}
 }
@@ -218,14 +219,14 @@ func TestLoadBalancerNoAvailableServers(t *testing.T) {
 	config := types.Config{
 		Algorithm: "round_robin",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1"},
+			{URL: testutil.API1ExampleURL, Token: testutil.TestToken1},
 		},
 	}
 
 	lb := NewLoadBalancer(config)
 
 	// Mark all servers as down
-	lb.MarkServerDown("https://api1.example.com")
+	lb.MarkServerDown(testutil.API1ExampleURL)
 
 	// Should get error when trying to select server
 	server, err := lb.SelectServer()
@@ -245,15 +246,15 @@ func TestLoadBalancerAlgorithms(t *testing.T) {
 			config := types.Config{
 				Algorithm: algorithm,
 				Servers: []types.UpstreamServer{
-					{URL: "https://api1.example.com", Token: "token1", Weight: 1},
-					{URL: "https://api2.example.com", Token: "token2", Weight: 2},
+					{URL: testutil.API1ExampleURL, Token: testutil.TestToken1, Weight: 1},
+					{URL: testutil.API2ExampleURL, Token: "token2", Weight: 2},
 				},
 			}
 
 			lb := NewLoadBalancer(config)
 
 			// Should be able to select servers with any algorithm
-			for i := 0; i < 5; i++ {
+			for range 5 {
 				server, err := lb.SelectServer()
 				if err != nil {
 					t.Fatalf("SelectServer failed with %s algorithm: %v", algorithm, err)
@@ -270,8 +271,8 @@ func TestLoadBalancerConcurrency(t *testing.T) {
 	config := types.Config{
 		Algorithm: "round_robin",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1"},
-			{URL: "https://api2.example.com", Token: "token2"},
+			{URL: testutil.API1ExampleURL, Token: testutil.TestToken1},
+			{URL: testutil.API2ExampleURL, Token: "token2"},
 		},
 	}
 
@@ -280,11 +281,11 @@ func TestLoadBalancerConcurrency(t *testing.T) {
 	// Test concurrent access
 	done := make(chan bool, 10)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		go func(id int) {
 			defer func() { done <- true }()
-			
-			for j := 0; j < 10; j++ {
+
+			for j := range 10 {
 				// Alternate between selecting and marking servers
 				if j%2 == 0 {
 					_, err := lb.SelectServer()
@@ -293,9 +294,9 @@ func TestLoadBalancerConcurrency(t *testing.T) {
 					}
 				} else {
 					if id%2 == 0 {
-						lb.MarkServerDown("https://api1.example.com")
+						lb.MarkServerDown(testutil.API1ExampleURL)
 					} else {
-						lb.MarkServerHealthy("https://api1.example.com")
+						lb.MarkServerHealthy(testutil.API1ExampleURL)
 					}
 				}
 			}
@@ -303,7 +304,7 @@ func TestLoadBalancerConcurrency(t *testing.T) {
 	}
 
 	// Wait for all goroutines to complete
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		<-done
 	}
 

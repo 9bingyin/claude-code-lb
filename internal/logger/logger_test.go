@@ -25,17 +25,17 @@ func TestSetDebugMode(t *testing.T) {
 
 func TestFormatTimestamp(t *testing.T) {
 	timestamp := formatTimestamp()
-	
+
 	// Check format - should be HH:MM:SS.mmm
 	if len(timestamp) != 12 {
 		t.Errorf("Expected timestamp length 12, got %d", len(timestamp))
 	}
-	
+
 	// Check format structure
 	if timestamp[2] != ':' || timestamp[5] != ':' || timestamp[8] != '.' {
 		t.Errorf("Timestamp format incorrect: %s", timestamp)
 	}
-	
+
 	// Parse to verify it's a valid time
 	_, err := time.Parse("15:04:05.000", timestamp)
 	if err != nil {
@@ -56,7 +56,7 @@ func TestInfo(t *testing.T) {
 	output := captureLogOutput(func() {
 		Info("TEST", "Test message")
 	})
-	
+
 	if !strings.Contains(output, " TEST") {
 		t.Errorf("Expected output to contain ' TEST', got: %s", output)
 	}
@@ -70,7 +70,7 @@ func TestInfoWithArgs(t *testing.T) {
 	output := captureLogOutput(func() {
 		Info("TEST", "Message %s %d", "hello", 42)
 	})
-	
+
 	if !strings.Contains(output, "Message hello 42") {
 		t.Error("Expected formatted message not found in output")
 	}
@@ -80,7 +80,7 @@ func TestSuccess(t *testing.T) {
 	output := captureLogOutput(func() {
 		Success("TEST", "Success message")
 	})
-	
+
 	if !strings.Contains(output, " TEST") {
 		t.Errorf("Expected output to contain ' TEST', got: %s", output)
 	}
@@ -93,7 +93,7 @@ func TestWarning(t *testing.T) {
 	output := captureLogOutput(func() {
 		Warning("TEST", "Warning message")
 	})
-	
+
 	if !strings.Contains(output, " TEST") {
 		t.Errorf("Expected output to contain ' TEST', got: %s", output)
 	}
@@ -106,7 +106,7 @@ func TestError(t *testing.T) {
 	output := captureLogOutput(func() {
 		Error("TEST", "Error message")
 	})
-	
+
 	if !strings.Contains(output, " TEST") {
 		t.Errorf("Expected output to contain ' TEST', got: %s", output)
 	}
@@ -138,7 +138,7 @@ func TestAuth(t *testing.T) {
 			output := captureLogOutput(func() {
 				Auth(tt.success, "Auth message")
 			})
-			
+
 			if !strings.Contains(output, " AUTH") {
 				t.Errorf("Expected output to contain ' AUTH', got: %s", output)
 			}
@@ -170,11 +170,11 @@ func TestDebug(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			SetDebugMode(tt.debugEnabled)
-			
+
 			output := captureLogOutput(func() {
 				Debug("TEST", "Debug message")
 			})
-			
+
 			if tt.shouldContain {
 				if !strings.Contains(output, " TEST") {
 					t.Errorf("Expected output to contain ' TEST', got: %s", output)
@@ -235,9 +235,9 @@ func TestConcurrentLogging(t *testing.T) {
 	originalOutput := log.Writer()
 	defer log.SetOutput(originalOutput)
 	log.SetOutput(os.Stderr) // Use stderr to avoid buffer issues
-	
+
 	done := make(chan bool, 4)
-	
+
 	for i := 0; i < 4; i++ {
 		go func(id int) {
 			for j := 0; j < 10; j++ {
@@ -246,11 +246,11 @@ func TestConcurrentLogging(t *testing.T) {
 			done <- true
 		}(i)
 	}
-	
+
 	// Wait for all goroutines to complete
 	for i := 0; i < 4; i++ {
 		<-done
 	}
-	
+
 	// If we reach here without hanging or panicking, the test passes
 }

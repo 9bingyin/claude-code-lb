@@ -11,27 +11,27 @@ import (
 
 func TestNew(t *testing.T) {
 	reporter := New()
-	
+
 	if reporter == nil {
 		t.Fatal("New() returned nil")
 	}
-	
+
 	if reporter.requestCount != 0 {
 		t.Errorf("Expected initial request count 0, got %d", reporter.requestCount)
 	}
-	
+
 	if reporter.errorCount != 0 {
 		t.Errorf("Expected initial error count 0, got %d", reporter.errorCount)
 	}
-	
+
 	if reporter.totalResponseTime != 0 {
 		t.Errorf("Expected initial response time 0, got %d", reporter.totalResponseTime)
 	}
-	
+
 	if reporter.requestCountByServer == nil {
 		t.Error("requestCountByServer should be initialized")
 	}
-	
+
 	if reporter.responseTimeByServer == nil {
 		t.Error("responseTimeByServer should be initialized")
 	}
@@ -39,23 +39,23 @@ func TestNew(t *testing.T) {
 
 func TestIncrementRequestCount(t *testing.T) {
 	reporter := New()
-	
+
 	// Initial count should be 0
 	if reporter.requestCount != 0 {
 		t.Errorf("Expected initial request count 0, got %d", reporter.requestCount)
 	}
-	
+
 	// Increment once
 	reporter.IncrementRequestCount()
 	if reporter.requestCount != 1 {
 		t.Errorf("Expected request count 1, got %d", reporter.requestCount)
 	}
-	
+
 	// Increment multiple times
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		reporter.IncrementRequestCount()
 	}
-	
+
 	if reporter.requestCount != 11 {
 		t.Errorf("Expected request count 11, got %d", reporter.requestCount)
 	}
@@ -63,23 +63,23 @@ func TestIncrementRequestCount(t *testing.T) {
 
 func TestIncrementErrorCount(t *testing.T) {
 	reporter := New()
-	
+
 	// Initial count should be 0
 	if reporter.errorCount != 0 {
 		t.Errorf("Expected initial error count 0, got %d", reporter.errorCount)
 	}
-	
+
 	// Increment once
 	reporter.IncrementErrorCount()
 	if reporter.errorCount != 1 {
 		t.Errorf("Expected error count 1, got %d", reporter.errorCount)
 	}
-	
+
 	// Increment multiple times
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		reporter.IncrementErrorCount()
 	}
-	
+
 	if reporter.errorCount != 6 {
 		t.Errorf("Expected error count 6, got %d", reporter.errorCount)
 	}
@@ -87,22 +87,22 @@ func TestIncrementErrorCount(t *testing.T) {
 
 func TestAddResponseTime(t *testing.T) {
 	reporter := New()
-	
+
 	// Initial response time should be 0
 	if reporter.totalResponseTime != 0 {
 		t.Errorf("Expected initial response time 0, got %d", reporter.totalResponseTime)
 	}
-	
+
 	// Add response time
 	reporter.AddResponseTime(100)
 	if reporter.totalResponseTime != 100 {
 		t.Errorf("Expected total response time 100, got %d", reporter.totalResponseTime)
 	}
-	
+
 	// Add more response times
 	reporter.AddResponseTime(50)
 	reporter.AddResponseTime(150)
-	
+
 	expected := int64(100 + 50 + 150)
 	if reporter.totalResponseTime != expected {
 		t.Errorf("Expected total response time %d, got %d", expected, reporter.totalResponseTime)
@@ -111,43 +111,43 @@ func TestAddResponseTime(t *testing.T) {
 
 func TestAddServerStats(t *testing.T) {
 	reporter := New()
-	
-	serverURL := "https://api.example.com"
+
+	serverURL := "http://test-api.local"
 	responseTime := int64(250)
-	
+
 	// Add server stats
 	reporter.AddServerStats(serverURL, responseTime)
-	
+
 	// Check request count for server
 	if reporter.requestCountByServer[serverURL] != 1 {
 		t.Errorf("Expected request count 1 for server, got %d", reporter.requestCountByServer[serverURL])
 	}
-	
+
 	// Check response time for server
 	if reporter.responseTimeByServer[serverURL] != responseTime {
 		t.Errorf("Expected response time %d for server, got %d", responseTime, reporter.responseTimeByServer[serverURL])
 	}
-	
+
 	// Add more stats for same server
 	reporter.AddServerStats(serverURL, 150)
-	
+
 	if reporter.requestCountByServer[serverURL] != 2 {
 		t.Errorf("Expected request count 2 for server, got %d", reporter.requestCountByServer[serverURL])
 	}
-	
+
 	expectedTotalTime := responseTime + 150
 	if reporter.responseTimeByServer[serverURL] != expectedTotalTime {
 		t.Errorf("Expected total response time %d for server, got %d", expectedTotalTime, reporter.responseTimeByServer[serverURL])
 	}
-	
+
 	// Add stats for different server
-	server2URL := "https://api2.example.com"
+	server2URL := "http://test-api2.local"
 	reporter.AddServerStats(server2URL, 300)
-	
+
 	if reporter.requestCountByServer[server2URL] != 1 {
 		t.Errorf("Expected request count 1 for server2, got %d", reporter.requestCountByServer[server2URL])
 	}
-	
+
 	if reporter.responseTimeByServer[server2URL] != 300 {
 		t.Errorf("Expected response time 300 for server2, got %d", reporter.responseTimeByServer[server2URL])
 	}
@@ -155,41 +155,41 @@ func TestAddServerStats(t *testing.T) {
 
 func TestLogStats(t *testing.T) {
 	reporter := New()
-	
+
 	// Add some test data
 	reporter.IncrementRequestCount()
 	reporter.IncrementRequestCount()
 	reporter.IncrementErrorCount()
 	reporter.AddResponseTime(100)
 	reporter.AddResponseTime(200)
-	reporter.AddServerStats("https://api1.example.com", 150)
-	reporter.AddServerStats("https://api2.example.com", 250)
-	
+	reporter.AddServerStats("http://test-api.local", 150)
+	reporter.AddServerStats("http://test-api.local", 250)
+
 	// LogStats should not panic
 	reporter.LogStats()
-	
+
 	// We can't easily test the log output, but we can ensure it doesn't crash
 }
 
 func TestStartReporter(t *testing.T) {
 	reporter := New()
-	
+
 	// StartReporter should not panic when called
 	// Note: This starts a goroutine that runs indefinitely, so we can't easily test its behavior
 	// In a real test environment, you might want to add a way to stop the reporter
 	go reporter.StartReporter()
-	
+
 	// Give it a moment to start
 	time.Sleep(10 * time.Millisecond)
-	
+
 	// If we reach here without panic, the test passes
 }
 
 func TestGinLoggerMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	
+
 	reporter := New()
-	
+
 	tests := []struct {
 		name           string
 		method         string
@@ -244,10 +244,10 @@ func TestGinLoggerMiddleware(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create Gin router
 			router := gin.New()
-			
+
 			// Add the logger middleware
 			router.Use(reporter.GinLoggerMiddleware())
-			
+
 			// Add test handler that returns the specified status code
 			router.Any("/*path", func(c *gin.Context) {
 				c.Status(tt.statusCode)
@@ -260,7 +260,7 @@ func TestGinLoggerMiddleware(t *testing.T) {
 			} else {
 				requestURL = tt.path
 			}
-			
+
 			req, _ := http.NewRequest(tt.method, requestURL, nil)
 			w := httptest.NewRecorder()
 
@@ -277,13 +277,13 @@ func TestGinLoggerMiddleware(t *testing.T) {
 
 func TestGinLoggerMiddlewareHealthCheck(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	
+
 	reporter := New()
-	
+
 	// Create router with middleware
 	router := gin.New()
 	router.Use(reporter.GinLoggerMiddleware())
-	
+
 	// Add health endpoint
 	router.GET("/health", func(c *gin.Context) {
 		c.Status(200)
@@ -298,85 +298,85 @@ func TestGinLoggerMiddlewareHealthCheck(t *testing.T) {
 	if w.Code != 200 {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
-	
+
 	// Health check requests should not be logged (no log output expected)
 	// This is hard to test directly, but the middleware should handle it without error
 }
 
 func TestReporterConcurrency(t *testing.T) {
 	reporter := New()
-	
+
 	// Test concurrent access to reporter methods
 	done := make(chan bool, 6)
-	
+
 	// Goroutine 1: Increment request count
 	go func() {
 		defer func() { done <- true }()
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			reporter.IncrementRequestCount()
 		}
 	}()
-	
+
 	// Goroutine 2: Increment error count
 	go func() {
 		defer func() { done <- true }()
-		for i := 0; i < 50; i++ {
+		for range 50 {
 			reporter.IncrementErrorCount()
 		}
 	}()
-	
+
 	// Goroutine 3: Add response times
 	go func() {
 		defer func() { done <- true }()
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			reporter.AddResponseTime(int64(i))
 		}
 	}()
-	
+
 	// Goroutine 4: Add server stats for server 1
 	go func() {
 		defer func() { done <- true }()
-		for i := 0; i < 50; i++ {
-			reporter.AddServerStats("https://api1.example.com", int64(i*10))
+		for i := range 50 {
+			reporter.AddServerStats("http://test-api1.local", int64(i*10))
 		}
 	}()
-	
+
 	// Goroutine 5: Add server stats for server 2
 	go func() {
 		defer func() { done <- true }()
-		for i := 0; i < 50; i++ {
-			reporter.AddServerStats("https://api2.example.com", int64(i*20))
+		for i := range 50 {
+			reporter.AddServerStats("http://test-api2.local", int64(i*20))
 		}
 	}()
-	
+
 	// Goroutine 6: Log stats
 	go func() {
 		defer func() { done <- true }()
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			reporter.LogStats()
 			time.Sleep(1 * time.Millisecond)
 		}
 	}()
-	
+
 	// Wait for all goroutines to complete
 	for i := 0; i < 6; i++ {
 		<-done
 	}
-	
+
 	// Verify final counts
 	if reporter.requestCount != 100 {
 		t.Errorf("Expected request count 100, got %d", reporter.requestCount)
 	}
-	
+
 	if reporter.errorCount != 50 {
 		t.Errorf("Expected error count 50, got %d", reporter.errorCount)
 	}
-	
-	if reporter.requestCountByServer["https://api1.example.com"] != 50 {
-		t.Errorf("Expected server1 request count 50, got %d", reporter.requestCountByServer["https://api1.example.com"])
+
+	if reporter.requestCountByServer["http://test-api1.local"] != 50 {
+		t.Errorf("Expected server1 request count 50, got %d", reporter.requestCountByServer["http://test-api1.local"])
 	}
-	
-	if reporter.requestCountByServer["https://api2.example.com"] != 50 {
-		t.Errorf("Expected server2 request count 50, got %d", reporter.requestCountByServer["https://api2.example.com"])
+
+	if reporter.requestCountByServer["http://test-api2.local"] != 50 {
+		t.Errorf("Expected server2 request count 50, got %d", reporter.requestCountByServer["http://test-api2.local"])
 	}
 }

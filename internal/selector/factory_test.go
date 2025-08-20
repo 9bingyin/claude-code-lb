@@ -3,15 +3,16 @@ package selector
 import (
 	"testing"
 
+	"claude-code-lb/internal/testutil"
 	"claude-code-lb/pkg/types"
 )
 
 func TestCreateSelector(t *testing.T) {
 	tests := []struct {
-		name           string
-		config         types.Config
-		expectedType   string
-		shouldError    bool
+		name         string
+		config       types.Config
+		expectedType string
+		shouldError  bool
 	}{
 		{
 			name: "load_balance mode",
@@ -19,7 +20,7 @@ func TestCreateSelector(t *testing.T) {
 				Mode:      "load_balance",
 				Algorithm: "round_robin",
 				Servers: []types.UpstreamServer{
-					{URL: "https://api1.example.com", Token: "token1"},
+					{URL: "http://test-api.local", Token: testutil.TestToken1},
 				},
 			},
 			expectedType: "*selector.LoadBalancer",
@@ -30,8 +31,8 @@ func TestCreateSelector(t *testing.T) {
 			config: types.Config{
 				Mode: "fallback",
 				Servers: []types.UpstreamServer{
-					{URL: "https://api1.example.com", Token: "token1", Priority: 1},
-					{URL: "https://api2.example.com", Token: "token2", Priority: 2},
+					{URL: "http://test-api.local", Token: testutil.TestToken1, Priority: 1},
+					{URL: "http://test-api.local", Token: "token2", Priority: 2},
 				},
 			},
 			expectedType: "*selector.FallbackSelector",
@@ -42,7 +43,7 @@ func TestCreateSelector(t *testing.T) {
 			config: types.Config{
 				Fallback: true,
 				Servers: []types.UpstreamServer{
-					{URL: "https://api1.example.com", Token: "token1"},
+					{URL: "http://test-api.local", Token: testutil.TestToken1},
 				},
 			},
 			expectedType: "*selector.FallbackSelector",
@@ -53,7 +54,7 @@ func TestCreateSelector(t *testing.T) {
 			config: types.Config{
 				Algorithm: "weighted_round_robin",
 				Servers: []types.UpstreamServer{
-					{URL: "https://api1.example.com", Token: "token1", Weight: 1},
+					{URL: "http://test-api.local", Token: testutil.TestToken1, Weight: 1},
 				},
 			},
 			expectedType: "*selector.LoadBalancer",
@@ -64,29 +65,27 @@ func TestCreateSelector(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			selector, err := CreateSelector(tt.config)
-			
+
 			if tt.shouldError {
 				if err == nil {
 					t.Error("Expected error but got none")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 				return
 			}
-			
+
 			if selector == nil {
 				t.Error("Expected selector but got nil")
 				return
 			}
-			
+
 			// Check that the selector implements the interface
-			_, ok := selector.(ServerSelector)
-			if !ok {
-				t.Error("Selector does not implement ServerSelector interface")
-			}
+			// Note: selector is already declared as ServerSelector type,
+			// so type assertion is redundant
 		})
 	}
 }
@@ -167,71 +166,71 @@ func TestLoadBalancerImplementsInterface(t *testing.T) {
 		Mode:      "load_balance",
 		Algorithm: "round_robin",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api.example.com", Token: "token"},
+			{URL: "http://test-api.local", Token: "token"},
 		},
 	}
-	
+
 	lb := NewLoadBalancer(config)
-	
+
 	// Test that it implements all interface methods
 	var _ ServerSelector = lb
-	
+
 	// Test individual method calls don't panic
 	_, err := lb.SelectServer()
 	if err != nil {
 		t.Logf("SelectServer returned error: %v (expected for minimal config)", err)
 	}
-	
+
 	// Test other methods
-	lb.MarkServerDown("https://api.example.com")
-	lb.MarkServerHealthy("https://api.example.com")
-	
+	lb.MarkServerDown("http://test-api.local")
+	lb.MarkServerHealthy("http://test-api.local")
+
 	servers := lb.GetAvailableServers()
-	if len(servers) < 0 {
+	if servers == nil {
 		t.Error("GetAvailableServers should return a slice")
 	}
-	
+
 	status := lb.GetServerStatus()
 	if status == nil {
 		t.Error("GetServerStatus should return a map")
 	}
-	
-	lb.RecoverServer("https://api.example.com")
+
+	lb.RecoverServer("http://test-api.local")
 }
 
 func TestFallbackSelectorImplementsInterface(t *testing.T) {
 	config := types.Config{
 		Mode: "fallback",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1", Priority: 1},
-			{URL: "https://api2.example.com", Token: "token2", Priority: 2},
+			{URL: "http://test-api.local", Token: testutil.TestToken1, Priority: 1},
+			{URL: "http://test-api.local", Token: "token2", Priority: 2},
 		},
 	}
-	
+
 	fs := NewFallbackSelector(config)
-	
+
 	// Test that it implements all interface methods
 	var _ ServerSelector = fs
-	
+
 	// Test individual method calls don't panic
 	_, err := fs.SelectServer()
 	if err != nil {
 		t.Logf("SelectServer returned error: %v (expected for minimal config)", err)
 	}
-	
+
 	// Test other methods
-	fs.MarkServerDown("https://api1.example.com")
-	fs.MarkServerHealthy("https://api1.example.com")
-	
+	fs.MarkServerDown("http://test-api.local")
+	fs.MarkServerHealthy("http://test-api.local")
+
 	servers := fs.GetAvailableServers()
-	if len(servers) < 0 {
+	if servers == nil {
 		t.Error("GetAvailableServers should return a slice")
 	}
-	
+
 	status := fs.GetServerStatus()
 	if status == nil {
 		t.Error("GetServerStatus should return a map")
 	}
-	
-	fs.RecoverServer("https://api1.example.com")
+
+	fs.RecoverServer("http://test-api.local")
 }

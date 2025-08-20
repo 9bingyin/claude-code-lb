@@ -1,8 +1,10 @@
 package balance
 
 import (
+	"slices"
 	"testing"
 
+	"claude-code-lb/internal/testutil"
 	"claude-code-lb/pkg/types"
 )
 
@@ -17,8 +19,8 @@ func TestNew(t *testing.T) {
 				Mode:      "load_balance",
 				Algorithm: "round_robin",
 				Servers: []types.UpstreamServer{
-					{URL: "https://api1.example.com", Token: "token1"},
-					{URL: "https://api2.example.com", Token: "token2"},
+					{URL: "http://test-api1.local", Token: testutil.TestToken1},
+					{URL: "http://test-api2.local", Token: "token2"},
 				},
 			},
 		},
@@ -27,8 +29,8 @@ func TestNew(t *testing.T) {
 			config: types.Config{
 				Mode: "fallback",
 				Servers: []types.UpstreamServer{
-					{URL: "https://api1.example.com", Token: "token1", Priority: 1},
-					{URL: "https://api2.example.com", Token: "token2", Priority: 2},
+					{URL: "http://test-api1.local", Token: testutil.TestToken1, Priority: 1},
+					{URL: "http://test-api2.local", Token: "token2", Priority: 2},
 				},
 			},
 		},
@@ -37,7 +39,7 @@ func TestNew(t *testing.T) {
 			config: types.Config{
 				Fallback: true,
 				Servers: []types.UpstreamServer{
-					{URL: "https://api1.example.com", Token: "token1"},
+					{URL: "http://test-api1.local", Token: testutil.TestToken1},
 				},
 			},
 		},
@@ -46,15 +48,15 @@ func TestNew(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			balancer := New(tt.config)
-			
+
 			if balancer == nil {
 				t.Fatal("New returned nil balancer")
 			}
-			
+
 			if balancer.config.Mode != tt.config.Mode {
 				t.Errorf("Expected mode %s, got %s", tt.config.Mode, balancer.config.Mode)
 			}
-			
+
 			if balancer.selector == nil {
 				t.Error("Selector should not be nil")
 			}
@@ -67,8 +69,8 @@ func TestBalancerGetNextServer(t *testing.T) {
 		Mode:      "load_balance",
 		Algorithm: "round_robin",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1"},
-			{URL: "https://api2.example.com", Token: "token2"},
+			{URL: "http://test-api1.local", Token: testutil.TestToken1},
+			{URL: "http://test-api2.local", Token: "token2"},
 		},
 	}
 
@@ -84,15 +86,8 @@ func TestBalancerGetNextServer(t *testing.T) {
 	}
 
 	// Verify the server is one of our configured servers
-	validUrls := []string{"https://api1.example.com", "https://api2.example.com"}
-	found := false
-	for _, url := range validUrls {
-		if server.URL == url {
-			found = true
-			break
-		}
-	}
-	if !found {
+	validUrls := []string{"http://test-api1.local", "http://test-api2.local"}
+	if !slices.Contains(validUrls, server.URL) {
 		t.Errorf("GetNextServer returned unexpected server: %s", server.URL)
 	}
 }
@@ -101,8 +96,8 @@ func TestBalancerGetNextServerWithFallback(t *testing.T) {
 	config := types.Config{
 		Mode: "fallback",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1", Priority: 1},
-			{URL: "https://api2.example.com", Token: "token2", Priority: 2},
+			{URL: "http://test-api1.local", Token: testutil.TestToken1, Priority: 1},
+			{URL: "http://test-api2.local", Token: "token2", Priority: 2},
 		},
 	}
 
@@ -118,7 +113,7 @@ func TestBalancerGetNextServerWithFallback(t *testing.T) {
 	}
 
 	// Should get highest priority server
-	if server.URL != "https://api1.example.com" {
+	if server.URL != "http://test-api1.local" {
 		t.Errorf("Expected highest priority server, got %s", server.URL)
 	}
 
@@ -137,22 +132,22 @@ func TestBalancerMarkServerDown(t *testing.T) {
 		Mode:      "load_balance",
 		Algorithm: "round_robin",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1"},
-			{URL: "https://api2.example.com", Token: "token2"},
+			{URL: "http://test-api1.local", Token: testutil.TestToken1},
+			{URL: "http://test-api2.local", Token: "token2"},
 		},
 	}
 
 	balancer := New(config)
 
 	// Mark a server as down
-	balancer.MarkServerDown("https://api1.example.com")
+	balancer.MarkServerDown("http://test-api1.local")
 
 	// Check server status
 	status := balancer.GetServerStatus()
-	if status["https://api1.example.com"] {
+	if status["http://test-api1.local"] {
 		t.Error("Server should be marked as down")
 	}
-	if !status["https://api2.example.com"] {
+	if !status["http://test-api2.local"] {
 		t.Error("Other server should still be available")
 	}
 }
@@ -162,27 +157,27 @@ func TestBalancerMarkServerHealthy(t *testing.T) {
 		Mode:      "load_balance",
 		Algorithm: "round_robin",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1"},
+			{URL: "http://test-api1.local", Token: testutil.TestToken1},
 		},
 	}
 
 	balancer := New(config)
 
 	// Mark server as down first
-	balancer.MarkServerDown("https://api1.example.com")
+	balancer.MarkServerDown("http://test-api1.local")
 
 	// Verify it's down
 	status := balancer.GetServerStatus()
-	if status["https://api1.example.com"] {
+	if status["http://test-api1.local"] {
 		t.Error("Server should be down")
 	}
 
 	// Mark server as healthy
-	balancer.MarkServerHealthy("https://api1.example.com")
+	balancer.MarkServerHealthy("http://test-api1.local")
 
 	// Verify it's healthy
 	status = balancer.GetServerStatus()
-	if !status["https://api1.example.com"] {
+	if !status["http://test-api1.local"] {
 		t.Error("Server should be healthy")
 	}
 }
@@ -192,9 +187,9 @@ func TestBalancerGetAvailableServers(t *testing.T) {
 		Mode:      "load_balance",
 		Algorithm: "round_robin",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1"},
-			{URL: "https://api2.example.com", Token: "token2"},
-			{URL: "https://api3.example.com", Token: "token3"},
+			{URL: "http://test-api1.local", Token: testutil.TestToken1},
+			{URL: "http://test-api2.local", Token: "token2"},
+			{URL: "http://test-api3.local", Token: "token3"},
 		},
 	}
 
@@ -207,7 +202,7 @@ func TestBalancerGetAvailableServers(t *testing.T) {
 	}
 
 	// Mark one server as down
-	balancer.MarkServerDown("https://api2.example.com")
+	balancer.MarkServerDown("http://test-api2.local")
 
 	// Should have 2 available servers
 	available = balancer.GetAvailableServers()
@@ -217,7 +212,7 @@ func TestBalancerGetAvailableServers(t *testing.T) {
 
 	// Verify the down server is not in the list
 	for _, server := range available {
-		if server.URL == "https://api2.example.com" {
+		if server.URL == "http://test-api2.local" {
 			t.Error("Down server should not be in available servers list")
 		}
 	}
@@ -228,8 +223,8 @@ func TestBalancerGetServerStatus(t *testing.T) {
 		Mode:      "load_balance",
 		Algorithm: "round_robin",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1"},
-			{URL: "https://api2.example.com", Token: "token2"},
+			{URL: "http://test-api1.local", Token: testutil.TestToken1},
+			{URL: "http://test-api2.local", Token: "token2"},
 		},
 	}
 
@@ -249,13 +244,13 @@ func TestBalancerGetServerStatus(t *testing.T) {
 	}
 
 	// Mark a server as down and check status
-	balancer.MarkServerDown("https://api1.example.com")
+	balancer.MarkServerDown("http://test-api1.local")
 	status = balancer.GetServerStatus()
 
-	if status["https://api1.example.com"] {
+	if status["http://test-api1.local"] {
 		t.Error("Marked down server should show as unavailable")
 	}
-	if !status["https://api2.example.com"] {
+	if !status["http://test-api2.local"] {
 		t.Error("Other server should still be available")
 	}
 }
@@ -265,27 +260,27 @@ func TestBalancerRecoverServer(t *testing.T) {
 		Mode:      "load_balance",
 		Algorithm: "round_robin",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1"},
+			{URL: "http://test-api1.local", Token: testutil.TestToken1},
 		},
 	}
 
 	balancer := New(config)
 
 	// Mark server as down
-	balancer.MarkServerDown("https://api1.example.com")
+	balancer.MarkServerDown("http://test-api1.local")
 
 	// Verify it's down
 	status := balancer.GetServerStatus()
-	if status["https://api1.example.com"] {
+	if status["http://test-api1.local"] {
 		t.Error("Server should be down")
 	}
 
 	// Recover the server
-	balancer.RecoverServer("https://api1.example.com")
+	balancer.RecoverServer("http://test-api1.local")
 
 	// Verify it's recovered
 	status = balancer.GetServerStatus()
-	if !status["https://api1.example.com"] {
+	if !status["http://test-api1.local"] {
 		t.Error("Server should be recovered")
 	}
 }
@@ -295,8 +290,8 @@ func TestBalancerIntegration(t *testing.T) {
 		Mode:      "load_balance",
 		Algorithm: "round_robin",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1"},
-			{URL: "https://api2.example.com", Token: "token2"},
+			{URL: "http://test-api1.local", Token: testutil.TestToken1},
+			{URL: "http://test-api2.local", Token: "token2"},
 		},
 	}
 

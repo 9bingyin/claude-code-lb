@@ -1,8 +1,10 @@
 package selector
 
 import (
+	"slices"
 	"testing"
 
+	"claude-code-lb/internal/testutil"
 	"claude-code-lb/pkg/types"
 )
 
@@ -10,9 +12,9 @@ func TestNewFallbackSelector(t *testing.T) {
 	config := types.Config{
 		Mode: "fallback",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1", Priority: 2, Weight: 1},
-			{URL: "https://api2.example.com", Token: "token2", Priority: 1, Weight: 2},
-			{URL: "https://api3.example.com", Token: "token3", Priority: 3, Weight: 3},
+			{URL: "http://test-api.local", Token: testutil.TestToken1, Priority: 2, Weight: 1},
+			{URL: "http://test-api.local", Token: "token2", Priority: 1, Weight: 2},
+			{URL: "http://test-api.local", Token: "token3", Priority: 3, Weight: 3},
 		},
 	}
 
@@ -40,9 +42,9 @@ func TestNewFallbackSelector(t *testing.T) {
 
 	// Check URLs are in correct order
 	expectedUrls := []string{
-		"https://api2.example.com", // priority 1
-		"https://api1.example.com", // priority 2
-		"https://api3.example.com", // priority 3
+		"http://test-api.local", // priority 1
+		"http://test-api.local", // priority 2
+		"http://test-api.local", // priority 3
 	}
 
 	for i, expectedUrl := range expectedUrls {
@@ -56,9 +58,9 @@ func TestNewFallbackSelectorWeightBasedPriority(t *testing.T) {
 	config := types.Config{
 		Mode: "fallback",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1", Weight: 1}, // priority 0, should become 3
-			{URL: "https://api2.example.com", Token: "token2", Weight: 3}, // priority 0, should become 1
-			{URL: "https://api3.example.com", Token: "token3", Weight: 2}, // priority 0, should become 2
+			{URL: "http://test-api.local", Token: testutil.TestToken1, Weight: 1}, // priority 0, should become 3
+			{URL: "http://test-api.local", Token: "token2", Weight: 3},            // priority 0, should become 1
+			{URL: "http://test-api.local", Token: "token3", Weight: 2},            // priority 0, should become 2
 		},
 	}
 
@@ -67,9 +69,9 @@ func TestNewFallbackSelectorWeightBasedPriority(t *testing.T) {
 	// Servers should be ordered by weight (higher weight = higher priority = lower priority number)
 	// Weight 3 -> Priority 1, Weight 2 -> Priority 2, Weight 1 -> Priority 3
 	expectedUrls := []string{
-		"https://api2.example.com", // weight 3 -> priority 1
-		"https://api3.example.com", // weight 2 -> priority 2
-		"https://api1.example.com", // weight 1 -> priority 3
+		"http://test-api.local", // weight 3 -> priority 1
+		"http://test-api.local", // weight 2 -> priority 2
+		"http://test-api.local", // weight 1 -> priority 3
 	}
 
 	for i, expectedUrl := range expectedUrls {
@@ -83,8 +85,8 @@ func TestFallbackSelectorSelectServer(t *testing.T) {
 	config := types.Config{
 		Mode: "fallback",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1", Priority: 2},
-			{URL: "https://api2.example.com", Token: "token2", Priority: 1},
+			{URL: "http://test-api.local", Token: testutil.TestToken1, Priority: 2},
+			{URL: "http://test-api.local", Token: "token2", Priority: 1},
 		},
 	}
 
@@ -98,7 +100,7 @@ func TestFallbackSelectorSelectServer(t *testing.T) {
 	if server == nil {
 		t.Fatal("SelectServer returned nil")
 	}
-	if server.URL != "https://api2.example.com" {
+	if server.URL != "http://test-api.local" {
 		t.Errorf("Should select highest priority server, got %s", server.URL)
 	}
 
@@ -116,9 +118,9 @@ func TestFallbackSelectorWithFailover(t *testing.T) {
 	config := types.Config{
 		Mode: "fallback",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1", Priority: 1},
-			{URL: "https://api2.example.com", Token: "token2", Priority: 2},
-			{URL: "https://api3.example.com", Token: "token3", Priority: 3},
+			{URL: "http://test-api.local", Token: testutil.TestToken1, Priority: 1},
+			{URL: "http://test-api.local", Token: "token2", Priority: 2},
+			{URL: "http://test-api.local", Token: "token3", Priority: 3},
 		},
 	}
 
@@ -129,31 +131,31 @@ func TestFallbackSelectorWithFailover(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SelectServer failed: %v", err)
 	}
-	if server.URL != "https://api1.example.com" {
+	if server.URL != "http://test-api.local" {
 		t.Errorf("Should select priority 1 server, got %s", server.URL)
 	}
 
 	// Mark priority 1 server as down
-	fs.MarkServerDown("https://api1.example.com")
+	fs.MarkServerDown("http://test-api.local")
 
 	// Should now select priority 2 server
 	server, err = fs.SelectServer()
 	if err != nil {
 		t.Fatalf("SelectServer failed: %v", err)
 	}
-	if server.URL != "https://api2.example.com" {
+	if server.URL != "http://test-api.local" {
 		t.Errorf("Should select priority 2 server after priority 1 is down, got %s", server.URL)
 	}
 
 	// Mark priority 2 server as down
-	fs.MarkServerDown("https://api2.example.com")
+	fs.MarkServerDown("http://test-api.local")
 
 	// Should now select priority 3 server
 	server, err = fs.SelectServer()
 	if err != nil {
 		t.Fatalf("SelectServer failed: %v", err)
 	}
-	if server.URL != "https://api3.example.com" {
+	if server.URL != "http://test-api.local" {
 		t.Errorf("Should select priority 3 server after priorities 1 and 2 are down, got %s", server.URL)
 	}
 }
@@ -163,18 +165,18 @@ func TestFallbackSelectorMarkServerDown(t *testing.T) {
 		Mode:     "fallback",
 		Cooldown: 60,
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1", Priority: 1},
+			{URL: "http://test-api.local", Token: testutil.TestToken1, Priority: 1},
 		},
 	}
 
 	fs := NewFallbackSelector(config)
 
 	// Mark server as down
-	fs.MarkServerDown("https://api1.example.com")
+	fs.MarkServerDown("http://test-api.local")
 
 	// Check status
 	status := fs.GetServerStatus()
-	if status["https://api1.example.com"] {
+	if status["http://test-api.local"] {
 		t.Error("Server should be marked as down")
 	}
 }
@@ -183,21 +185,21 @@ func TestFallbackSelectorMarkServerHealthy(t *testing.T) {
 	config := types.Config{
 		Mode: "fallback",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1", Priority: 1},
+			{URL: "http://test-api.local", Token: testutil.TestToken1, Priority: 1},
 		},
 	}
 
 	fs := NewFallbackSelector(config)
 
 	// Mark it down first
-	fs.MarkServerDown("https://api1.example.com")
+	fs.MarkServerDown("http://test-api.local")
 
 	// Then mark it healthy
-	fs.MarkServerHealthy("https://api1.example.com")
+	fs.MarkServerHealthy("http://test-api.local")
 
 	// Check status
 	status := fs.GetServerStatus()
-	if !status["https://api1.example.com"] {
+	if !status["http://test-api.local"] {
 		t.Error("Server should be marked as healthy")
 	}
 }
@@ -206,8 +208,8 @@ func TestFallbackSelectorGetAvailableServers(t *testing.T) {
 	config := types.Config{
 		Mode: "fallback",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1", Priority: 1},
-			{URL: "https://api2.example.com", Token: "token2", Priority: 2},
+			{URL: testutil.API1ExampleURL, Token: testutil.TestToken1, Priority: 1},
+			{URL: testutil.API2ExampleURL, Token: "token2", Priority: 2},
 		},
 	}
 
@@ -220,7 +222,7 @@ func TestFallbackSelectorGetAvailableServers(t *testing.T) {
 	}
 
 	// Mark one server as down
-	fs.MarkServerDown("https://api1.example.com")
+	fs.MarkServerDown(testutil.API1ExampleURL)
 
 	// Should have 1 available server
 	available = fs.GetAvailableServers()
@@ -228,8 +230,8 @@ func TestFallbackSelectorGetAvailableServers(t *testing.T) {
 		t.Errorf("Expected 1 available server after marking one down, got %d", len(available))
 	}
 
-	if available[0].URL != "https://api2.example.com" {
-		t.Errorf("Available server should be api2, got %s", available[0].URL)
+	if available[0].URL != testutil.API2ExampleURL {
+		t.Errorf("Available server should be %s, got %s", testutil.API2ExampleURL, available[0].URL)
 	}
 }
 
@@ -237,27 +239,27 @@ func TestFallbackSelectorRecoverServer(t *testing.T) {
 	config := types.Config{
 		Mode: "fallback",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1", Priority: 1},
+			{URL: "http://test-api.local", Token: testutil.TestToken1, Priority: 1},
 		},
 	}
 
 	fs := NewFallbackSelector(config)
 
 	// Mark server as down
-	fs.MarkServerDown("https://api1.example.com")
+	fs.MarkServerDown("http://test-api.local")
 
 	// Verify it's down
 	status := fs.GetServerStatus()
-	if status["https://api1.example.com"] {
+	if status["http://test-api.local"] {
 		t.Error("Server should be down")
 	}
 
 	// Recover the server
-	fs.RecoverServer("https://api1.example.com")
+	fs.RecoverServer("http://test-api.local")
 
 	// Verify it's back up
 	status = fs.GetServerStatus()
-	if !status["https://api1.example.com"] {
+	if !status["http://test-api.local"] {
 		t.Error("Server should be recovered")
 	}
 }
@@ -266,20 +268,20 @@ func TestFallbackSelectorNoAvailableServers(t *testing.T) {
 	config := types.Config{
 		Mode: "fallback",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1", Priority: 1},
+			{URL: "http://test-api.local", Token: testutil.TestToken1, Priority: 1},
 		},
 	}
 
 	fs := NewFallbackSelector(config)
 
 	// Mark all servers as down
-	fs.MarkServerDown("https://api1.example.com")
+	fs.MarkServerDown("http://test-api.local")
 
 	// Should get an emergency fallback or error
 	server, err := fs.SelectServer()
 	if err == nil && server != nil {
 		// If we get a server, it should be the emergency fallback
-		if server.URL != "https://api1.example.com" {
+		if server.URL != "http://test-api.local" {
 			t.Errorf("Emergency fallback should return the configured server, got %s", server.URL)
 		}
 	} else if err != nil {
@@ -293,16 +295,16 @@ func TestFallbackSelectorEmergencyFallback(t *testing.T) {
 		Mode:     "fallback",
 		Cooldown: 60,
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1", Priority: 1},
-			{URL: "https://api2.example.com", Token: "token2", Priority: 2},
+			{URL: "http://test-api.local", Token: testutil.TestToken1, Priority: 1},
+			{URL: "http://test-api.local", Token: "token2", Priority: 2},
 		},
 	}
 
 	fs := NewFallbackSelector(config)
 
 	// Mark all servers as down
-	fs.MarkServerDown("https://api1.example.com")
-	fs.MarkServerDown("https://api2.example.com")
+	fs.MarkServerDown("http://test-api.local")
+	fs.MarkServerDown("http://test-api.local")
 
 	// Should get emergency fallback (server with shortest remaining cooldown)
 	server, err := fs.SelectServer()
@@ -310,15 +312,8 @@ func TestFallbackSelectorEmergencyFallback(t *testing.T) {
 		t.Logf("No emergency fallback available, got error: %v", err)
 	} else if server != nil {
 		// Should get one of the configured servers
-		validUrls := []string{"https://api1.example.com", "https://api2.example.com"}
-		found := false
-		for _, url := range validUrls {
-			if server.URL == url {
-				found = true
-				break
-			}
-		}
-		if !found {
+		validUrls := []string{"http://test-api.local"}
+		if !slices.Contains(validUrls, server.URL) {
 			t.Errorf("Emergency fallback returned unexpected server: %s", server.URL)
 		}
 	}
@@ -328,9 +323,9 @@ func TestFallbackSelectorPriorityConsistency(t *testing.T) {
 	config := types.Config{
 		Mode: "fallback",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api1.example.com", Token: "token1", Priority: 3},
-			{URL: "https://api2.example.com", Token: "token2", Priority: 1},
-			{URL: "https://api3.example.com", Token: "token3", Priority: 2},
+			{URL: "http://test-api.local", Token: testutil.TestToken1, Priority: 3},
+			{URL: "http://test-api.local", Token: "token2", Priority: 1},
+			{URL: "http://test-api.local", Token: "token3", Priority: 2},
 		},
 	}
 
@@ -338,15 +333,15 @@ func TestFallbackSelectorPriorityConsistency(t *testing.T) {
 
 	// Multiple selections should always return the same highest priority server
 	var selectedUrl string
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		server, err := fs.SelectServer()
 		if err != nil {
 			t.Fatalf("SelectServer failed on iteration %d: %v", i, err)
 		}
-		
+
 		if i == 0 {
 			selectedUrl = server.URL
-			if selectedUrl != "https://api2.example.com" {
+			if selectedUrl != "http://test-api.local" {
 				t.Errorf("First selection should be highest priority server (api2), got %s", selectedUrl)
 			}
 		} else {

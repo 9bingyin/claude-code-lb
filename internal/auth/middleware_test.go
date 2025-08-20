@@ -12,10 +12,10 @@ import (
 
 func TestMinMax(t *testing.T) {
 	tests := []struct {
-		name     string
-		a, b     int
-		minExp   int
-		maxExp   int
+		name   string
+		a, b   int
+		minExp int
+		maxExp int
 	}{
 		{"a < b", 3, 5, 3, 5},
 		{"a > b", 7, 2, 2, 7},
@@ -28,7 +28,7 @@ func TestMinMax(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			minResult := min(tt.a, tt.b)
 			maxResult := max(tt.a, tt.b)
-			
+
 			if minResult != tt.minExp {
 				t.Errorf("min(%d, %d) = %d, want %d", tt.a, tt.b, minResult, tt.minExp)
 			}
@@ -134,10 +134,10 @@ func TestMiddleware(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create Gin router
 			router := gin.New()
-			
+
 			// Add auth middleware
 			router.Use(Middleware(tt.config))
-			
+
 			// Add test endpoint
 			router.GET("/test", func(c *gin.Context) {
 				c.String(http.StatusOK, "success")
@@ -221,7 +221,7 @@ func TestAuthMiddlewareWithDifferentMethods(t *testing.T) {
 
 	router := gin.New()
 	router.Use(Middleware(config))
-	
+
 	// Add endpoints for different HTTP methods
 	router.GET("/test", func(c *gin.Context) { c.String(http.StatusOK, "GET success") })
 	router.POST("/test", func(c *gin.Context) { c.String(http.StatusOK, "POST success") })

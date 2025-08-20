@@ -14,7 +14,7 @@ func TestUpstreamServer(t *testing.T) {
 		{
 			name: "basic server configuration",
 			server: UpstreamServer{
-				URL:      "https://api.anthropic.com",
+				URL:      "http://test-anthropic-api.local",
 				Weight:   1,
 				Priority: 1,
 				Token:    "test-token",
@@ -23,11 +23,11 @@ func TestUpstreamServer(t *testing.T) {
 		{
 			name: "server with balance check",
 			server: UpstreamServer{
-				URL:                  "https://api.anthropic.com",
+				URL:                  "http://test-anthropic-api.local",
 				Weight:               2,
 				Priority:             1,
 				Token:                "test-token",
-				BalanceCheck:         "curl -s https://api.anthropic.com/v1/balance",
+				BalanceCheck:         "curl -s http://test-anthropic-api.local/v1/balance",
 				BalanceCheckInterval: 300,
 				BalanceThreshold:     10.0,
 			},
@@ -35,7 +35,7 @@ func TestUpstreamServer(t *testing.T) {
 		{
 			name: "server with downtime",
 			server: UpstreamServer{
-				URL:       "https://api.anthropic.com",
+				URL:       "http://test-anthropic-api.local",
 				Weight:    1,
 				Priority:  2,
 				Token:     "test-token",
@@ -132,7 +132,7 @@ func TestConfig(t *testing.T) {
 				Port:      "3000",
 				Algorithm: "random",
 				Servers: []UpstreamServer{
-					{URL: "https://api.anthropic.com", Token: "token"},
+					{URL: "http://test-anthropic-api.local", Token: "token"},
 				},
 				Fallback: true,
 			},

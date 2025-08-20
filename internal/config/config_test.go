@@ -61,7 +61,7 @@ func TestApplyDefaults(t *testing.T) {
 			name: "apply all defaults",
 			input: types.Config{
 				Servers: []types.UpstreamServer{
-					{URL: "https://api.anthropic.com", Token: "test-token"},
+					{URL: "http://test-anthropic-api.local", Token: "test-token"},
 				},
 			},
 			expected: types.Config{
@@ -70,7 +70,7 @@ func TestApplyDefaults(t *testing.T) {
 				Algorithm: "round_robin",
 				Cooldown:  60,
 				Servers: []types.UpstreamServer{
-					{URL: "https://api.anthropic.com", Token: "test-token"},
+					{URL: "http://test-anthropic-api.local", Token: "test-token"},
 				},
 			},
 		},
@@ -81,7 +81,7 @@ func TestApplyDefaults(t *testing.T) {
 				Algorithm: "weighted_round_robin",
 				Cooldown:  120,
 				Servers: []types.UpstreamServer{
-					{URL: "https://api.anthropic.com", Token: "test-token"},
+					{URL: "http://test-anthropic-api.local", Token: "test-token"},
 				},
 			},
 			expected: types.Config{
@@ -90,7 +90,7 @@ func TestApplyDefaults(t *testing.T) {
 				Algorithm: "weighted_round_robin",
 				Cooldown:  120,
 				Servers: []types.UpstreamServer{
-					{URL: "https://api.anthropic.com", Token: "test-token"},
+					{URL: "http://test-anthropic-api.local", Token: "test-token"},
 				},
 			},
 		},
@@ -99,7 +99,7 @@ func TestApplyDefaults(t *testing.T) {
 			input: types.Config{
 				Fallback: true,
 				Servers: []types.UpstreamServer{
-					{URL: "https://api.anthropic.com", Token: "test-token"},
+					{URL: "http://test-anthropic-api.local", Token: "test-token"},
 				},
 			},
 			expected: types.Config{
@@ -109,7 +109,7 @@ func TestApplyDefaults(t *testing.T) {
 				Cooldown:  60,
 				Fallback:  true,
 				Servers: []types.UpstreamServer{
-					{URL: "https://api.anthropic.com", Token: "test-token"},
+					{URL: "http://test-anthropic-api.local", Token: "test-token"},
 				},
 			},
 		},
@@ -119,7 +119,7 @@ func TestApplyDefaults(t *testing.T) {
 				Auth:     true,
 				AuthKeys: []string{"key1", "key2"},
 				Servers: []types.UpstreamServer{
-					{URL: "https://api.anthropic.com", Token: "test-token"},
+					{URL: "http://test-anthropic-api.local", Token: "test-token"},
 				},
 			},
 			expected: types.Config{
@@ -130,7 +130,7 @@ func TestApplyDefaults(t *testing.T) {
 				Auth:      true,
 				AuthKeys:  []string{"key1", "key2"},
 				Servers: []types.UpstreamServer{
-					{URL: "https://api.anthropic.com", Token: "test-token"},
+					{URL: "http://test-anthropic-api.local", Token: "test-token"},
 				},
 			},
 		},
@@ -139,7 +139,7 @@ func TestApplyDefaults(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := applyDefaults(tt.input)
-			
+
 			if result.Port != tt.expected.Port {
 				t.Errorf("Port = %v, want %v", result.Port, tt.expected.Port)
 			}
@@ -173,7 +173,7 @@ func TestLoadWithPath(t *testing.T) {
 		Mode:      "load_balance",
 		Algorithm: "round_robin",
 		Servers: []types.UpstreamServer{
-			{URL: "https://api.anthropic.com", Token: "test-token"},
+			{URL: "http://test-anthropic-api.local", Token: "test-token"},
 		},
 		Auth:     true,
 		AuthKeys: []string{"key1"},
@@ -203,7 +203,7 @@ func TestLoadWithPath(t *testing.T) {
 	if len(result.Servers) != 1 {
 		t.Errorf("Expected 1 server, got %d", len(result.Servers))
 	}
-	
+
 	// Test invalid JSON
 	invalidConfigFile := filepath.Join(tempDir, "invalid_config.json")
 	err = os.WriteFile(invalidConfigFile, []byte("{invalid json"), 0644)
@@ -221,7 +221,7 @@ func TestLoadWithPath(t *testing.T) {
 
 func TestGenerateExampleConfig(t *testing.T) {
 	example := GenerateExampleConfig()
-	
+
 	// Check that it contains expected fields
 	if !strings.Contains(example, "port") {
 		t.Error("Example config should contain 'port' field")
@@ -235,14 +235,14 @@ func TestGenerateExampleConfig(t *testing.T) {
 	if !strings.Contains(example, "servers") {
 		t.Error("Example config should contain 'servers' field")
 	}
-	
+
 	// Test that it's valid JSON
 	var config types.Config
 	err := json.Unmarshal([]byte(example), &config)
 	if err != nil {
 		t.Errorf("Generated example config is not valid JSON: %v", err)
 	}
-	
+
 	// Test that applying defaults doesn't fail
 	result := applyDefaults(config)
 	if result.Port == "" {
@@ -262,7 +262,7 @@ func TestApplyDefaultsValidation(t *testing.T) {
 			name: "valid config",
 			config: types.Config{
 				Servers: []types.UpstreamServer{
-					{URL: "https://api.anthropic.com", Token: "test-token"},
+					{URL: "http://test-anthropic-api.local", Token: "test-token"},
 				},
 			},
 			shouldPanic: false,
@@ -273,7 +273,7 @@ func TestApplyDefaultsValidation(t *testing.T) {
 			config: types.Config{
 				Algorithm: "weighted_round_robin",
 				Servers: []types.UpstreamServer{
-					{URL: "https://api.anthropic.com", Token: "test-token", Weight: 1},
+					{URL: "http://test-anthropic-api.local", Token: "test-token", Weight: 1},
 				},
 			},
 			shouldPanic: false,
@@ -284,7 +284,7 @@ func TestApplyDefaultsValidation(t *testing.T) {
 			config: types.Config{
 				Algorithm: "random",
 				Servers: []types.UpstreamServer{
-					{URL: "https://api.anthropic.com", Token: "test-token"},
+					{URL: "http://test-anthropic-api.local", Token: "test-token"},
 				},
 			},
 			shouldPanic: false,
@@ -295,7 +295,7 @@ func TestApplyDefaultsValidation(t *testing.T) {
 			config: types.Config{
 				Mode: "fallback",
 				Servers: []types.UpstreamServer{
-					{URL: "https://api.anthropic.com", Token: "test-token", Priority: 1},
+					{URL: "http://test-anthropic-api.local", Token: "test-token", Priority: 1},
 				},
 			},
 			shouldPanic: false,
@@ -316,7 +316,7 @@ func TestApplyDefaultsValidation(t *testing.T) {
 					}
 				}
 			}()
-			
+
 			result := applyDefaults(tt.config)
 			if !tt.shouldPanic {
 				// Basic validation that defaults were applied
