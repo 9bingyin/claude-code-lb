@@ -3,6 +3,7 @@ package balance
 import (
 	"context"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -10,6 +11,11 @@ import (
 
 	"claude-code-lb/internal/logger"
 	"claude-code-lb/pkg/types"
+)
+
+const (
+	// DefaultCommandTimeout 默认命令超时时间
+	DefaultCommandTimeout = 30 * time.Second
 )
 
 // BalanceInfo 余额信息
@@ -30,6 +36,7 @@ type BalanceChecker struct {
 	serverTimers    map[string]*time.Ticker // 每个服务器的定时器
 	balancer        BalancerInterface       // 负载均衡器接口
 	commandExecutor CommandExecutor         // 命令执行器接口
+	stopOnce        sync.Once               // 确保Stop只执行一次
 }
 
 // BalancerInterface 负载均衡器接口（用于解耦）
@@ -52,8 +59,13 @@ func (e *DefaultCommandExecutor) ExecuteCommand(command string) (float64, error)
 	ctx, cancel := context.WithTimeout(context.Background(), e.Timeout)
 	defer cancel()
 
-	// 使用 bash -c 来执行命令，支持管道等复杂命令
-	cmd := exec.CommandContext(ctx, "bash", "-c", command)
+	// 使用跨平台的 shell：Windows 使用 cmd，其他系统使用 sh
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.CommandContext(ctx, "cmd", "/C", command)
+	} else {
+		cmd = exec.CommandContext(ctx, "sh", "-c", command)
+	}
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -76,10 +88,10 @@ func NewBalanceChecker(config types.Config, balancer BalancerInterface) *Balance
 		config:          config,
 		balances:        make(map[string]*BalanceInfo),
 		stopChan:        make(chan struct{}),
-		commandTimeout:  30 * time.Second, // 固定30秒超时
+		commandTimeout:  DefaultCommandTimeout,
 		serverTimers:    make(map[string]*time.Ticker),
 		balancer:        balancer,
-		commandExecutor: &DefaultCommandExecutor{Timeout: 30 * time.Second},
+		commandExecutor: &DefaultCommandExecutor{Timeout: DefaultCommandTimeout},
 	}
 }
 
@@ -89,7 +101,7 @@ func NewBalanceCheckerWithExecutor(config types.Config, balancer BalancerInterfa
 		config:          config,
 		balances:        make(map[string]*BalanceInfo),
 		stopChan:        make(chan struct{}),
-		commandTimeout:  30 * time.Second,
+		commandTimeout:  DefaultCommandTimeout,
 		serverTimers:    make(map[string]*time.Ticker),
 		balancer:        balancer,
 		commandExecutor: executor,
@@ -123,17 +135,19 @@ func (bc *BalanceChecker) Start() {
 
 // Stop 停止余额查询
 func (bc *BalanceChecker) Stop() {
-	close(bc.stopChan)
+	bc.stopOnce.Do(func() {
+		close(bc.stopChan)
 
-	// 停止所有服务器的定时器
-	bc.mutex.Lock()
-	defer bc.mutex.Unlock()
+		// 停止所有服务器的定时器
+		bc.mutex.Lock()
+		defer bc.mutex.Unlock()
 
-	for _, ticker := range bc.serverTimers {
-		if ticker != nil {
-			ticker.Stop()
+		for _, ticker := range bc.serverTimers {
+			if ticker != nil {
+				ticker.Stop()
+			}
 		}
-	}
+	})
 }
 
 // startServerBalanceCheck 为单个服务器启动余额查询

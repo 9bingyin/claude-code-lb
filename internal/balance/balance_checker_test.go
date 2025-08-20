@@ -2,6 +2,8 @@ package balance
 
 import (
 	"errors"
+	"os/exec"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -371,7 +373,7 @@ func TestBalanceCheckerConcurrency(t *testing.T) {
 	// Goroutine 1: GetBalance
 	go func() {
 		defer wg.Done()
-		for range 10 {
+		for i := 0; i < 10; i++ {
 			checker.GetBalance(testutil.API1ExampleURL)
 			time.Sleep(1 * time.Millisecond) // Small delay to avoid tight loops
 		}
@@ -380,7 +382,7 @@ func TestBalanceCheckerConcurrency(t *testing.T) {
 	// Goroutine 2: GetAllBalances
 	go func() {
 		defer wg.Done()
-		for range 10 {
+		for i := 0; i < 10; i++ {
 			checker.GetAllBalances()
 			time.Sleep(1 * time.Millisecond)
 		}
@@ -389,7 +391,7 @@ func TestBalanceCheckerConcurrency(t *testing.T) {
 	// Goroutine 3: Simulate balance updates (thread-safe)
 	go func() {
 		defer wg.Done()
-		for i := range 10 {
+		for i := 0; i < 10; i++ {
 			checker.mutex.Lock()
 			checker.balances[testutil.API1ExampleURL] = &BalanceInfo{
 				Balance:     float64(i),
@@ -404,7 +406,7 @@ func TestBalanceCheckerConcurrency(t *testing.T) {
 	// Goroutine 4: More GetBalance calls
 	go func() {
 		defer wg.Done()
-		for range 10 {
+		for i := 0; i < 10; i++ {
 			checker.GetBalance(testutil.API2ExampleURL)
 			time.Sleep(1 * time.Millisecond)
 		}
@@ -502,6 +504,17 @@ func TestBackwardCompatibilitySupport(t *testing.T) {
 
 // TestDefaultExecutorFunctionality 验证默认执行器行为与原来一致
 func TestDefaultExecutorFunctionality(t *testing.T) {
+	// 检查 shell 是否可用
+	var shellCmd string
+	if runtime.GOOS == "windows" {
+		shellCmd = "cmd"
+	} else {
+		shellCmd = "sh"
+	}
+	if _, err := exec.LookPath(shellCmd); err != nil {
+		t.Skipf("%s not found; skipping shell-dependent test", shellCmd)
+	}
+
 	executor := &DefaultCommandExecutor{Timeout: 30 * time.Second}
 
 	// 测试简单命令执行
@@ -533,6 +546,17 @@ func TestDefaultExecutorFunctionality(t *testing.T) {
 
 // TestEndToEndFunctionality 测试真实功能集成
 func TestEndToEndFunctionality(t *testing.T) {
+	// 检查 shell 是否可用
+	var shellCmd string
+	if runtime.GOOS == "windows" {
+		shellCmd = "cmd"
+	} else {
+		shellCmd = "sh"
+	}
+	if _, err := exec.LookPath(shellCmd); err != nil {
+		t.Skipf("%s not found; skipping shell-dependent E2E test", shellCmd)
+	}
+
 	config := types.Config{
 		Servers: []types.UpstreamServer{
 			{
@@ -580,6 +604,75 @@ func TestEndToEndFunctionality(t *testing.T) {
 	newBalance := checker.GetBalance(testutil.API1ExampleURL)
 	if !newBalance.LastChecked.Equal(oldTime) {
 		t.Error("Balance should not be updated after Stop()")
+	}
+}
+
+// TestBalanceThresholdTrigger 测试余额阈值触发 MarkServerDown
+func TestBalanceThresholdTrigger(t *testing.T) {
+	tests := []struct {
+		name                  string
+		balance               float64
+		threshold             float64
+		expectedMarkDownCalls int
+	}{
+		{
+			name:                  "balance above threshold",
+			balance:               15.0,
+			threshold:             10.0,
+			expectedMarkDownCalls: 0,
+		},
+		{
+			name:                  "balance equal to threshold",
+			balance:               10.0,
+			threshold:             10.0,
+			expectedMarkDownCalls: 1,
+		},
+		{
+			name:                  "balance below threshold",
+			balance:               5.0,
+			threshold:             10.0,
+			expectedMarkDownCalls: 1,
+		},
+		{
+			name:                  "zero threshold with zero balance",
+			balance:               0.0,
+			threshold:             0.0,
+			expectedMarkDownCalls: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := types.Config{
+				Servers: []types.UpstreamServer{
+					{
+						URL:                  testutil.API1ExampleURL,
+						Token:                testutil.TestToken1,
+						BalanceCheck:         "check_balance_cmd", // 使用特定命令
+						BalanceCheckInterval: 1,                   // 1秒间隔，便于测试
+						BalanceThreshold:     tt.threshold,
+					},
+				},
+			}
+
+			mockBalancer := testutil.NewMockBalancer()
+			mockExecutor := testutil.NewMockCommandExecutor()
+			checker := NewBalanceCheckerWithExecutor(config, mockBalancer, mockExecutor)
+
+			// 设置模拟执行器返回指定余额
+			mockExecutor.SetResult("check_balance_cmd", tt.balance)
+
+			// 启动检查器并等待检查完成
+			checker.Start()
+			time.Sleep(50 * time.Millisecond) // 等待至少一次检查
+			checker.Stop()
+
+			// 检查是否调用了 MarkServerDown
+			actualCalls := mockBalancer.GetMarkDownCallCount(testutil.API1ExampleURL)
+			if actualCalls != tt.expectedMarkDownCalls {
+				t.Errorf("Expected %d MarkServerDown calls, got %d", tt.expectedMarkDownCalls, actualCalls)
+			}
+		})
 	}
 }
 

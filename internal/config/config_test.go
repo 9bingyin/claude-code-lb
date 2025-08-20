@@ -36,11 +36,13 @@ func TestGetEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clean up environment
-			os.Unsetenv(tt.envKey)
+			// Set up environment using t.Setenv for automatic cleanup
 			if tt.envValue != "" {
-				os.Setenv(tt.envKey, tt.envValue)
-				defer os.Unsetenv(tt.envKey)
+				t.Setenv(tt.envKey, tt.envValue)
+			} else {
+				// Ensure it's unset for this subtest
+				t.Setenv(tt.envKey, "")
+				os.Unsetenv(tt.envKey)
 			}
 
 			result := getEnv(tt.envKey, tt.defaultValue)
@@ -155,6 +157,20 @@ func TestApplyDefaults(t *testing.T) {
 			if result.Auth != tt.expected.Auth {
 				t.Errorf("Auth = %v, want %v", result.Auth, tt.expected.Auth)
 			}
+			if result.Fallback != tt.expected.Fallback {
+				t.Errorf("Fallback = %v, want %v", result.Fallback, tt.expected.Fallback)
+			}
+			if len(result.Servers) != len(tt.expected.Servers) {
+				t.Fatalf("Servers length = %d, want %d", len(result.Servers), len(tt.expected.Servers))
+			}
+			for i := range result.Servers {
+				if result.Servers[i].URL != tt.expected.Servers[i].URL {
+					t.Errorf("Servers[%d].URL = %s, want %s", i, result.Servers[i].URL, tt.expected.Servers[i].URL)
+				}
+				if result.Servers[i].Token != tt.expected.Servers[i].Token {
+					t.Errorf("Servers[%d].Token = %s, want %s", i, result.Servers[i].Token, tt.expected.Servers[i].Token)
+				}
+			}
 		})
 	}
 }
@@ -211,12 +227,14 @@ func TestLoadWithPath(t *testing.T) {
 		t.Fatalf("Failed to write invalid config file: %v", err)
 	}
 
-	// Capture log.Fatalf for invalid JSON test
-	defer func() {
-		if r := recover(); r != nil {
-			// This is expected for invalid JSON
-		}
-	}()
+	// Test invalid JSON - this should cause the program to exit/panic
+	// We need to test this in a subprocess to avoid killing the test runner
+	// For now, just document that this path exists but can't be easily tested
+	// in unit tests due to log.Fatalf behavior
+
+	// Note: LoadWithPath calls log.Fatalf on invalid JSON, which calls os.Exit()
+	// This cannot be caught with recover() and would terminate the test process
+	// In a real scenario, this would exit the program with an error message
 }
 
 func TestGenerateExampleConfig(t *testing.T) {
@@ -251,11 +269,10 @@ func TestGenerateExampleConfig(t *testing.T) {
 }
 
 func TestApplyDefaultsValidation(t *testing.T) {
-	// Test that validation works for different scenarios
-	tests := []struct {
+	// Test valid configurations (these should not cause log.Fatal)
+	validTests := []struct {
 		name        string
 		config      types.Config
-		shouldPanic bool
 		description string
 	}{
 		{
@@ -265,8 +282,7 @@ func TestApplyDefaultsValidation(t *testing.T) {
 					{URL: "http://test-anthropic-api.local", Token: "test-token"},
 				},
 			},
-			shouldPanic: false,
-			description: "Should not panic with valid config",
+			description: "Should not fail with valid config",
 		},
 		{
 			name: "valid weighted algorithm",
@@ -276,8 +292,7 @@ func TestApplyDefaultsValidation(t *testing.T) {
 					{URL: "http://test-anthropic-api.local", Token: "test-token", Weight: 1},
 				},
 			},
-			shouldPanic: false,
-			description: "Should not panic with valid weighted algorithm",
+			description: "Should not fail with valid weighted algorithm",
 		},
 		{
 			name: "valid random algorithm",
@@ -287,8 +302,7 @@ func TestApplyDefaultsValidation(t *testing.T) {
 					{URL: "http://test-anthropic-api.local", Token: "test-token"},
 				},
 			},
-			shouldPanic: false,
-			description: "Should not panic with valid random algorithm",
+			description: "Should not fail with valid random algorithm",
 		},
 		{
 			name: "valid fallback mode",
@@ -298,38 +312,54 @@ func TestApplyDefaultsValidation(t *testing.T) {
 					{URL: "http://test-anthropic-api.local", Token: "test-token", Priority: 1},
 				},
 			},
-			shouldPanic: false,
-			description: "Should not panic with valid fallback mode",
+			description: "Should not fail with valid fallback mode",
+		},
+		{
+			name: "auth enabled with keys",
+			config: types.Config{
+				Auth:     true,
+				AuthKeys: []string{"key1", "key2"},
+				Servers: []types.UpstreamServer{
+					{URL: "http://test-anthropic-api.local", Token: "test-token"},
+				},
+			},
+			description: "Should not fail with valid auth config",
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range validTests {
 		t.Run(tt.name, func(t *testing.T) {
-			defer func() {
-				if r := recover(); r != nil {
-					if !tt.shouldPanic {
-						t.Errorf("Test %s: Unexpected panic: %v", tt.name, r)
-					}
-				} else {
-					if tt.shouldPanic {
-						t.Errorf("Test %s: Expected panic but none occurred", tt.name)
-					}
-				}
-			}()
-
 			result := applyDefaults(tt.config)
-			if !tt.shouldPanic {
-				// Basic validation that defaults were applied
-				if result.Port == "" {
-					t.Error("Port should have a default value")
+
+			// Basic validation that defaults were applied
+			if result.Port == "" {
+				t.Error("Port should have a default value")
+			}
+			if result.Algorithm == "" {
+				t.Error("Algorithm should have a default value")
+			}
+			if result.Mode == "" {
+				t.Error("Mode should have a default value")
+			}
+
+			// Verify input values are preserved
+			if tt.config.Auth {
+				if result.Auth != tt.config.Auth {
+					t.Errorf("Auth flag not preserved: got %t, want %t", result.Auth, tt.config.Auth)
 				}
-				if result.Algorithm == "" {
-					t.Error("Algorithm should have a default value")
-				}
-				if result.Mode == "" {
-					t.Error("Mode should have a default value")
+				if len(result.AuthKeys) != len(tt.config.AuthKeys) {
+					t.Errorf("AuthKeys not preserved: got %d keys, want %d", len(result.AuthKeys), len(tt.config.AuthKeys))
 				}
 			}
 		})
 	}
+
+	// Note: Invalid configurations like no servers, invalid algorithms, etc.
+	// cause log.Fatal which calls os.Exit(1) and cannot be tested in unit tests.
+	// These would need to be tested with subprocess testing or integration tests.
+	// Examples of configurations that would cause log.Fatal:
+	// - config.Servers empty
+	// - invalid mode (not "load_balance" or "fallback")
+	// - invalid algorithm (not in validAlgorithms list)
+	// - auth=true but authKeys empty
 }

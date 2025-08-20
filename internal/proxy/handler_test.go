@@ -313,7 +313,9 @@ func TestHandlerNoAvailableServers(t *testing.T) {
 
 	// Check response body
 	var response map[string]string
-	json.Unmarshal(w.Body.Bytes(), &response)
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("invalid JSON response: %v", err)
+	}
 	if response["error"] != "No available servers" {
 		t.Errorf("Expected error message 'No available servers', got %s", response["error"])
 	}

@@ -1,6 +1,7 @@
 package selector
 
 import (
+	"fmt"
 	"testing"
 
 	"claude-code-lb/internal/testutil"
@@ -83,9 +84,14 @@ func TestCreateSelector(t *testing.T) {
 				return
 			}
 
-			// Check that the selector implements the interface
-			// Note: selector is already declared as ServerSelector type,
-			// so type assertion is redundant
+			// Check that the selector implements the interface and has correct type
+			actualType := fmt.Sprintf("%T", selector)
+			if actualType != tt.expectedType {
+				t.Errorf("Expected type %s, got %s", tt.expectedType, actualType)
+			}
+
+			// Verify it implements ServerSelector interface
+			var _ ServerSelector = selector
 		})
 	}
 }

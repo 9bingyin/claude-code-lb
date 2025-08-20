@@ -52,7 +52,7 @@ func TestIncrementRequestCount(t *testing.T) {
 	}
 
 	// Increment multiple times
-	for range 10 {
+	for i := 0; i < 10; i++ {
 		reporter.IncrementRequestCount()
 	}
 
@@ -76,7 +76,7 @@ func TestIncrementErrorCount(t *testing.T) {
 	}
 
 	// Increment multiple times
-	for range 5 {
+	for i := 0; i < 5; i++ {
 		reporter.IncrementErrorCount()
 	}
 
@@ -312,7 +312,7 @@ func TestReporterConcurrency(t *testing.T) {
 	// Goroutine 1: Increment request count
 	go func() {
 		defer func() { done <- true }()
-		for range 100 {
+		for i := 0; i < 100; i++ {
 			reporter.IncrementRequestCount()
 		}
 	}()
@@ -320,7 +320,7 @@ func TestReporterConcurrency(t *testing.T) {
 	// Goroutine 2: Increment error count
 	go func() {
 		defer func() { done <- true }()
-		for range 50 {
+		for i := 0; i < 50; i++ {
 			reporter.IncrementErrorCount()
 		}
 	}()
@@ -328,7 +328,7 @@ func TestReporterConcurrency(t *testing.T) {
 	// Goroutine 3: Add response times
 	go func() {
 		defer func() { done <- true }()
-		for i := range 100 {
+		for i := 0; i < 100; i++ {
 			reporter.AddResponseTime(int64(i))
 		}
 	}()
@@ -336,7 +336,7 @@ func TestReporterConcurrency(t *testing.T) {
 	// Goroutine 4: Add server stats for server 1
 	go func() {
 		defer func() { done <- true }()
-		for i := range 50 {
+		for i := 0; i < 50; i++ {
 			reporter.AddServerStats("http://test-api1.local", int64(i*10))
 		}
 	}()
@@ -344,7 +344,7 @@ func TestReporterConcurrency(t *testing.T) {
 	// Goroutine 5: Add server stats for server 2
 	go func() {
 		defer func() { done <- true }()
-		for i := range 50 {
+		for i := 0; i < 50; i++ {
 			reporter.AddServerStats("http://test-api2.local", int64(i*20))
 		}
 	}()
@@ -352,7 +352,7 @@ func TestReporterConcurrency(t *testing.T) {
 	// Goroutine 6: Log stats
 	go func() {
 		defer func() { done <- true }()
-		for range 10 {
+		for i := 0; i < 10; i++ {
 			reporter.LogStats()
 			time.Sleep(1 * time.Millisecond)
 		}

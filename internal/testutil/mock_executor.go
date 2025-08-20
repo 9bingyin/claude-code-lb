@@ -1,6 +1,9 @@
 package testutil
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 // CommandExecutor 命令执行器接口
 type CommandExecutor interface {
@@ -15,6 +18,8 @@ type MockCommandExecutor struct {
 	Errors map[string]error
 	// CallCount 记录每个命令的调用次数
 	CallCount map[string]int
+	// mutex 保护并发访问
+	mutex sync.RWMutex
 }
 
 // NewMockCommandExecutor 创建新的模拟命令执行器
@@ -28,6 +33,9 @@ func NewMockCommandExecutor() *MockCommandExecutor {
 
 // ExecuteCommand 执行命令（模拟）
 func (m *MockCommandExecutor) ExecuteCommand(command string) (float64, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
 	// 记录调用次数
 	m.CallCount[command]++
 
@@ -58,21 +66,29 @@ func (m *MockCommandExecutor) ExecuteCommand(command string) (float64, error) {
 
 // SetResult 设置命令的返回结果
 func (m *MockCommandExecutor) SetResult(command string, result float64) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	m.Results[command] = result
 }
 
 // SetError 设置命令的返回错误
 func (m *MockCommandExecutor) SetError(command string, err error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	m.Errors[command] = err
 }
 
 // GetCallCount 获取命令的调用次数
 func (m *MockCommandExecutor) GetCallCount(command string) int {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
 	return m.CallCount[command]
 }
 
 // Reset 重置所有状态
 func (m *MockCommandExecutor) Reset() {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	m.Results = make(map[string]float64)
 	m.Errors = make(map[string]error)
 	m.CallCount = make(map[string]int)

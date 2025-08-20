@@ -254,7 +254,7 @@ func TestLoadBalancerAlgorithms(t *testing.T) {
 			lb := NewLoadBalancer(config)
 
 			// Should be able to select servers with any algorithm
-			for range 5 {
+			for i := 0; i < 5; i++ {
 				server, err := lb.SelectServer()
 				if err != nil {
 					t.Fatalf("SelectServer failed with %s algorithm: %v", algorithm, err)
@@ -281,11 +281,11 @@ func TestLoadBalancerConcurrency(t *testing.T) {
 	// Test concurrent access
 	done := make(chan bool, 10)
 
-	for i := range 10 {
+	for i := 0; i < 10; i++ {
 		go func(id int) {
 			defer func() { done <- true }()
 
-			for j := range 10 {
+			for j := 0; j < 10; j++ {
 				// Alternate between selecting and marking servers
 				if j%2 == 0 {
 					_, err := lb.SelectServer()
@@ -304,7 +304,7 @@ func TestLoadBalancerConcurrency(t *testing.T) {
 	}
 
 	// Wait for all goroutines to complete
-	for range 10 {
+	for i := 0; i < 10; i++ {
 		<-done
 	}
 

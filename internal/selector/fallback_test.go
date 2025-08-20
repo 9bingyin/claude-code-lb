@@ -333,7 +333,7 @@ func TestFallbackSelectorPriorityConsistency(t *testing.T) {
 
 	// Multiple selections should always return the same highest priority server
 	var selectedUrl string
-	for i := range 5 {
+	for i := 0; i < 5; i++ {
 		server, err := fs.SelectServer()
 		if err != nil {
 			t.Fatalf("SelectServer failed on iteration %d: %v", i, err)

@@ -72,6 +72,24 @@ func TestUpstreamServer(t *testing.T) {
 			if unmarshaled.Token != tt.server.Token {
 				t.Errorf("Token mismatch: got %s, want %s", unmarshaled.Token, tt.server.Token)
 			}
+
+			// DownUntil should be omitted in JSON and thus zero on unmarshal
+			if !unmarshaled.DownUntil.IsZero() {
+				t.Errorf("DownUntil should be zero after unmarshal; got %v", unmarshaled.DownUntil)
+			}
+
+			// For servers with balance-check, ensure these fields survive round-trip
+			if tt.server.BalanceCheck != "" {
+				if unmarshaled.BalanceCheck != tt.server.BalanceCheck {
+					t.Errorf("BalanceCheck mismatch: got %s, want %s", unmarshaled.BalanceCheck, tt.server.BalanceCheck)
+				}
+				if unmarshaled.BalanceCheckInterval != tt.server.BalanceCheckInterval {
+					t.Errorf("BalanceCheckInterval mismatch: got %d, want %d", unmarshaled.BalanceCheckInterval, tt.server.BalanceCheckInterval)
+				}
+				if unmarshaled.BalanceThreshold != tt.server.BalanceThreshold {
+					t.Errorf("BalanceThreshold mismatch: got %f, want %f", unmarshaled.BalanceThreshold, tt.server.BalanceThreshold)
+				}
+			}
 		})
 	}
 }
@@ -173,6 +191,21 @@ func TestConfig(t *testing.T) {
 			if unmarshaled.Cooldown != tt.config.Cooldown {
 				t.Errorf("Cooldown mismatch: got %d, want %d", unmarshaled.Cooldown, tt.config.Cooldown)
 			}
+			if unmarshaled.Debug != tt.config.Debug {
+				t.Errorf("Debug mismatch: got %t, want %t", unmarshaled.Debug, tt.config.Debug)
+			}
+			if len(unmarshaled.AuthKeys) != len(tt.config.AuthKeys) {
+				t.Errorf("AuthKeys length mismatch: got %d, want %d", len(unmarshaled.AuthKeys), len(tt.config.AuthKeys))
+			} else {
+				for i := range unmarshaled.AuthKeys {
+					if unmarshaled.AuthKeys[i] != tt.config.AuthKeys[i] {
+						t.Errorf("AuthKeys[%d] mismatch: got %s, want %s", i, unmarshaled.AuthKeys[i], tt.config.AuthKeys[i])
+					}
+				}
+			}
+			if unmarshaled.Fallback != tt.config.Fallback {
+				t.Errorf("Fallback mismatch: got %t, want %t", unmarshaled.Fallback, tt.config.Fallback)
+			}
 		})
 	}
 }
@@ -246,5 +279,11 @@ func TestClaudeResponse(t *testing.T) {
 	}
 	if unmarshaled.Usage.OutputTokens != response.Usage.OutputTokens {
 		t.Errorf("Usage.OutputTokens mismatch: got %d, want %d", unmarshaled.Usage.OutputTokens, response.Usage.OutputTokens)
+	}
+	if unmarshaled.Usage.CacheCreationInputTokens != response.Usage.CacheCreationInputTokens {
+		t.Errorf("Usage.CacheCreationInputTokens mismatch: got %d, want %d", unmarshaled.Usage.CacheCreationInputTokens, response.Usage.CacheCreationInputTokens)
+	}
+	if unmarshaled.Usage.CacheReadInputTokens != response.Usage.CacheReadInputTokens {
+		t.Errorf("Usage.CacheReadInputTokens mismatch: got %d, want %d", unmarshaled.Usage.CacheReadInputTokens, response.Usage.CacheReadInputTokens)
 	}
 }
