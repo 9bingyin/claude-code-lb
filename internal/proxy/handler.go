@@ -242,39 +242,27 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 		logger.Debug("PROXY", "Response headers:\n%s", respHeaders.String())
 	}
 
-	// 在 debug 模式下读取响应体用于日志记录
+	// 始终读取响应体用于 Token 统计和错误处理
 	var responseBody []byte
 	var responseReader io.Reader = resp.Body
 
-	if debugMode {
-		bodyBytes, err := io.ReadAll(resp.Body)
-		if err != nil {
-			logger.Error("PROXY", "Failed to read response body for debug: %v", err)
-			return false
-		}
-		responseBody = bodyBytes
-		responseReader = bytes.NewReader(bodyBytes)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Error("PROXY", "Failed to read response body: %v", err)
+		return false
+	}
+	responseBody = bodyBytes
+	responseReader = bytes.NewReader(bodyBytes)
 
-		// 记录完整原始响应
+	// Debug 模式下记录完整原始响应
+	if debugMode {
 		logger.Debug("PROXY", "Raw response body:\n%s", string(responseBody))
 	}
 
 	// 检查响应状态，如果是5xx错误或429速率限制，标记服务器为不可用
 	if resp.StatusCode >= 500 || resp.StatusCode == 429 {
-		var errorDetail string
-
-		if debugMode && responseBody != nil {
-			// debug 模式下已经读取了响应体
-			errorDetail = strings.TrimSpace(string(responseBody))
-		} else {
-			// 非 debug 模式下才读取响应体
-			bodyBytes, bodyErr := io.ReadAll(responseReader)
-			if bodyErr != nil {
-				errorDetail = fmt.Sprintf("(failed to read response body: %v)", bodyErr)
-			} else {
-				errorDetail = strings.TrimSpace(string(bodyBytes))
-			}
-		}
+		// 使用已读取的响应体
+		errorDetail := strings.TrimSpace(string(responseBody))
 
 		// 清理换行符，使日志更紧凑
 		errorDetail = strings.ReplaceAll(errorDetail, "\n", " ")
@@ -306,24 +294,8 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 
 	// 记录响应日志
 	if resp.StatusCode == 200 {
-		// 尝试解析 usage 信息以增强日志（所有模式下都启用）
-		var model string
-		var usage types.ClaudeUsage
-		var parseSuccess bool
-
-		if debugMode && responseBody != nil {
-			// debug 模式下直接使用已读取的响应体
-			model, usage, parseSuccess = parseUsageInfo(responseBody, resp.Header.Get("Content-Type"))
-		} else {
-			// 非 debug 模式下需要重新读取响应体来解析
-			if contentType := resp.Header.Get("Content-Type"); strings.Contains(strings.ToLower(contentType), "application/json") {
-				if bodyBytes, err := io.ReadAll(responseReader); err == nil {
-					model, usage, parseSuccess = parseUsageInfo(bodyBytes, contentType)
-					// 重新创建 reader 供后续使用
-					responseReader = bytes.NewReader(bodyBytes)
-				}
-			}
-		}
+		// 始终解析 usage 信息以增强日志
+		model, usage, parseSuccess := parseUsageInfo(responseBody, resp.Header.Get("Content-Type"))
 
 		if parseSuccess && model != "" {
 			logger.Success("PROXY", "Success: %s | Status: %d (%dms) | Model: %s | Input: %d | Output: %d | Cache Create: %d | Cache Read: %d",
@@ -371,19 +343,8 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 			}
 		}
 	} else {
-		// 对于非流式响应，检查是否已经读取了响应体
-		if (debugMode && responseBody != nil) || (!debugMode && strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "application/json")) {
-			// 如果已经读取了响应体（debug模式或非debug模式下的JSON响应），使用 responseReader
-			if bodyBytes, err := io.ReadAll(responseReader); err == nil {
-				c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), bodyBytes)
-			} else {
-				// 读取失败，返回错误
-				c.JSON(500, gin.H{"error": "Failed to read response body"})
-			}
-		} else {
-			// 使用原始的响应体
-			c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), responseReader, nil)
-		}
+		// 对于非流式响应，使用已读取的响应体
+		c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), responseBody)
 	}
 
 	return true // 请求成功
