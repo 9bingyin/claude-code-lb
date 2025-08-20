@@ -4,6 +4,8 @@
 
 [![Build](https://github.com/9bingyin/claude-code-lb/actions/workflows/build.yml/badge.svg)](https://github.com/9bingyin/claude-code-lb/actions/workflows/build.yml) [![Docker](https://github.com/9bingyin/claude-code-lb/actions/workflows/docker.yml/badge.svg)](https://github.com/9bingyin/claude-code-lb/actions/workflows/docker.yml)
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/9bingyin/claude-code-lb)
+
 ## 功能特性
 
 - **双工作模式**: 负载均衡模式 + 故障转移模式
