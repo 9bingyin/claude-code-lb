@@ -79,8 +79,8 @@ func main() {
 	// 添加恢复中间件
 	r.Use(gin.Recovery())
 
-	// 设置信任的代理，如果不需要获取真实IP可以设置为空
-	r.SetTrustedProxies([]string{})
+	// 设置信任的代理，允许从上游代理获取真实客户端IP
+	r.SetTrustedProxies(nil)
 
 	// 健康检查路由
 	r.GET("/health", health.Handler(cfg, balancer))
