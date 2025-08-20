@@ -105,8 +105,8 @@ func main() {
 	log.Printf("%s==================== Claude Code Proxy ====================%s", logger.ColorBold, logger.ColorReset)
 	logger.Info("BOOT", "Version: %s (commit: %s, built: %s)", version, commit, date)
 	logger.Info("BOOT", "Starting server on port %s", port)
-	logger.Info("BOOT", "Load balancer: %s (%d servers)", cfg.Algorithm, len(cfg.Servers))
-	logger.Info("BOOT", "Fallback: %t | Circuit breaker: %ds | Debug: %t", cfg.Fallback, cfg.Cooldown, cfg.Debug)
+	logger.Info("BOOT", "Load balancer: %s (%d servers)", cfg.Mode, len(cfg.Servers))
+	logger.Info("BOOT", "Algorithm: %s | Circuit breaker: %ds | Debug: %t", cfg.Algorithm, cfg.Cooldown, cfg.Debug)
 	logger.Info("BOOT", "Health check: passive (auto-recovery after cooldown)")
 	logger.Info("BOOT", "Authentication: %t", cfg.Auth)
 	if cfg.Auth {
