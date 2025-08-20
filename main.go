@@ -80,7 +80,13 @@ func main() {
 	r.Use(gin.Recovery())
 
 	// 设置信任的代理，允许从上游代理获取真实客户端IP
-	r.SetTrustedProxies(nil)
+	// 只信任常见的内网IP段，防止恶意IP伪造攻击
+	r.SetTrustedProxies([]string{
+		"127.0.0.0/8",      // 回环地址段
+		"172.16.0.0/12",    // Docker默认网段
+		"10.0.0.0/8",       // 私有网段A类
+		"192.168.0.0/16",   // 私有网段C类
+	})
 
 	// 健康检查路由
 	r.GET("/health", health.Handler(cfg, balancer))
