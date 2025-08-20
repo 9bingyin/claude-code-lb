@@ -5,7 +5,6 @@ import (
 	"errors"
 	"math/big"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"claude-code-lb/internal/logger"
@@ -15,10 +14,11 @@ import (
 // LoadBalancer 负载均衡选择器
 type LoadBalancer struct {
 	config             types.Config
-	currentServerIndex int64 // 使用 atomic 操作
+	currentServerIndex int64 // 轮询索引
 	serverMutex        sync.Mutex
 	serverStatus       map[string]bool
-	serverWeights      map[string]int // 用于平滑加权轮询
+	serverWeights      map[string]int       // 用于平滑加权轮询
+	serverDownUntil    map[string]time.Time // 服务器冷却时间
 	statusMutex        sync.RWMutex
 	failureCount       map[string]int64 // 服务器失败次数
 }
@@ -26,10 +26,11 @@ type LoadBalancer struct {
 // NewLoadBalancer 创建新的负载均衡选择器
 func NewLoadBalancer(config types.Config) *LoadBalancer {
 	lb := &LoadBalancer{
-		config:        config,
-		serverStatus:  make(map[string]bool),
-		serverWeights: make(map[string]int),
-		failureCount:  make(map[string]int64),
+		config:          config,
+		serverStatus:    make(map[string]bool),
+		serverWeights:   make(map[string]int),
+		serverDownUntil: make(map[string]time.Time),
+		failureCount:    make(map[string]int64),
 	}
 
 	// 初始化服务器状态和权重
@@ -40,6 +41,7 @@ func NewLoadBalancer(config types.Config) *LoadBalancer {
 			weight = 1
 		}
 		lb.serverWeights[server.URL] = weight
+		lb.serverDownUntil[server.URL] = time.Time{}
 		lb.failureCount[server.URL] = 0
 	}
 
@@ -83,11 +85,12 @@ func (lb *LoadBalancer) getRoundRobinServer(servers []types.UpstreamServer) *typ
 	lb.serverMutex.Lock()
 	defer lb.serverMutex.Unlock()
 
-	index := atomic.AddInt64(&lb.currentServerIndex, 1) % int64(len(servers))
+	lb.currentServerIndex++
+	index := lb.currentServerIndex % int64(len(servers))
 	return &servers[index]
 }
 
-// getWeightedServer 加权轮询算法选择服务器
+// getWeightedServer 平滑加权轮询算法选择服务器
 func (lb *LoadBalancer) getWeightedServer(servers []types.UpstreamServer) *types.UpstreamServer {
 	if len(servers) == 0 {
 		return nil
@@ -103,7 +106,7 @@ func (lb *LoadBalancer) getWeightedServer(servers []types.UpstreamServer) *types
 	// 计算总权重
 	totalWeight := 0
 	for _, server := range servers {
-		weight := lb.serverWeights[server.URL]
+		weight := server.Weight
 		if weight <= 0 {
 			weight = 1
 		}
@@ -116,14 +119,14 @@ func (lb *LoadBalancer) getWeightedServer(servers []types.UpstreamServer) *types
 
 	for i := range servers {
 		server := &servers[i]
-		weight := lb.serverWeights[server.URL]
-		if weight <= 0 {
-			weight = 1
+		originalWeight := server.Weight
+		if originalWeight <= 0 {
+			originalWeight = 1
 		}
 
-		// 更新当前权重
-		currentWeight := lb.serverWeights[server.URL] + weight
-		lb.serverWeights[server.URL] = currentWeight
+		// 增加原始权重到当前权重
+		lb.serverWeights[server.URL] += originalWeight
+		currentWeight := lb.serverWeights[server.URL]
 
 		if currentWeight > maxCurrentWeight {
 			maxCurrentWeight = currentWeight
@@ -132,7 +135,7 @@ func (lb *LoadBalancer) getWeightedServer(servers []types.UpstreamServer) *types
 	}
 
 	if selected != nil {
-		// 减去总权重
+		// 选中的服务器减去总权重
 		lb.serverWeights[selected.URL] -= totalWeight
 	}
 
@@ -166,7 +169,7 @@ func (lb *LoadBalancer) MarkServerDown(url string) {
 	lb.failureCount[url]++
 	failures := lb.failureCount[url]
 
-	// 动态计算冷却时间
+	// 动态计算冷却时间（指数退避）
 	cooldownDuration := time.Duration(lb.config.Cooldown) * time.Second
 	if failures > 1 {
 		// 指数退避，但设置上限
@@ -174,17 +177,13 @@ func (lb *LoadBalancer) MarkServerDown(url string) {
 		if dynamicCooldown > 10*time.Minute {
 			dynamicCooldown = 10 * time.Minute // 最大 10 分钟
 		}
+		cooldownDuration = dynamicCooldown
 	}
 
 	downUntil := time.Now().Add(cooldownDuration)
 
-	// 更新对应服务器的冷却时间
-	for i, server := range lb.config.Servers {
-		if server.URL == url {
-			lb.config.Servers[i].DownUntil = downUntil
-			break
-		}
-	}
+	// 记录服务器冷却时间（使用内部字段，不修改共享配置）
+	lb.serverDownUntil[url] = downUntil
 
 	logger.Warning("LOAD", "Server marked down: %s (failures: %d, cooldown: %v)", url, failures, cooldownDuration)
 }
@@ -198,12 +197,18 @@ func (lb *LoadBalancer) GetAvailableServers() []types.UpstreamServer {
 	defer lb.statusMutex.RUnlock()
 
 	for _, server := range lb.config.Servers {
-		if lb.serverStatus[server.URL] && now.After(server.DownUntil) {
+		if lb.isServerAvailable(server.URL, now) {
 			available = append(available, server)
 		}
 	}
 
 	return available
+}
+
+// isServerAvailable 统一的服务器可用性判断逻辑
+func (lb *LoadBalancer) isServerAvailable(url string, now time.Time) bool {
+	// 检查服务器状态和冷却时间
+	return lb.serverStatus[url] && now.After(lb.serverDownUntil[url])
 }
 
 // GetServerStatus 获取服务器状态
@@ -218,6 +223,13 @@ func (lb *LoadBalancer) GetServerStatus() map[string]bool {
 	return status
 }
 
+// GetServerDownUntil 获取服务器的冷却结束时间
+func (lb *LoadBalancer) GetServerDownUntil(url string) time.Time {
+	lb.statusMutex.RLock()
+	defer lb.statusMutex.RUnlock()
+	return lb.serverDownUntil[url]
+}
+
 // RecoverServer 恢复服务器
 func (lb *LoadBalancer) RecoverServer(url string) {
 	lb.statusMutex.Lock()
@@ -226,12 +238,7 @@ func (lb *LoadBalancer) RecoverServer(url string) {
 	lb.serverStatus[url] = true
 
 	// 清除冷却时间
-	for i, server := range lb.config.Servers {
-		if server.URL == url {
-			lb.config.Servers[i].DownUntil = time.Time{}
-			break
-		}
-	}
+	lb.serverDownUntil[url] = time.Time{}
 
 	logger.Success("LOAD", "Server recovered: %s", url)
 }
@@ -252,12 +259,7 @@ func (lb *LoadBalancer) MarkServerHealthy(url string) {
 	if !lb.serverStatus[url] {
 		lb.serverStatus[url] = true
 		// 清除冷却时间
-		for i, server := range lb.config.Servers {
-			if server.URL == url {
-				lb.config.Servers[i].DownUntil = time.Time{}
-				break
-			}
-		}
+		lb.serverDownUntil[url] = time.Time{}
 		logger.Success("LOAD", "Server %s auto-recovered from healthy request", url)
 	}
 }

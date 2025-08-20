@@ -67,6 +67,9 @@ func applyDefaults(config types.Config) types.Config {
 		}
 	}
 
+	// 验证配置一致性
+	validateConfigConsistency(config)
+
 	// 验证配置
 	if len(config.Servers) == 0 {
 		log.Fatal("At least one upstream server is required")
@@ -165,4 +168,51 @@ func GenerateExampleConfig() string {
 
 	data, _ := json.MarshalIndent(example, "", "  ")
 	return string(data)
+}
+
+// validateConfigConsistency 验证配置字段与模式的一致性
+func validateConfigConsistency(config types.Config) {
+	switch config.Mode {
+	case "load_balance":
+		// 负载均衡模式下，priority 字段无效
+		hasPriority := false
+		for _, server := range config.Servers {
+			if server.Priority > 0 {
+				hasPriority = true
+				break
+			}
+		}
+		if hasPriority {
+			log.Printf("WARNING: 'priority' field is ignored in load_balance mode. Use 'weight' for load balancing instead.")
+		}
+
+		// 检查算法是否适用
+		if config.Algorithm == "" {
+			log.Printf("INFO: Using default algorithm 'round_robin' for load_balance mode.")
+		}
+
+	case "fallback":
+		// 故障转移模式下，algorithm 字段无效（除非用于权重计算优先级）
+		if config.Algorithm != "" && config.Algorithm != "round_robin" {
+			log.Printf("WARNING: 'algorithm' field (%s) is ignored in fallback mode. Servers are selected by priority order.", config.Algorithm)
+		}
+
+		// 检查优先级设置
+		hasExplicitPriority := false
+		hasWeight := false
+		for _, server := range config.Servers {
+			if server.Priority > 0 {
+				hasExplicitPriority = true
+			}
+			if server.Weight > 0 {
+				hasWeight = true
+			}
+		}
+
+		if !hasExplicitPriority && hasWeight {
+			log.Printf("INFO: No explicit priorities set. Using weight-based priority calculation (higher weight = higher priority).")
+		} else if !hasExplicitPriority && !hasWeight {
+			log.Printf("INFO: No priorities or weights set. Servers will be prioritized by configuration order.")
+		}
+	}
 }

@@ -107,18 +107,9 @@ func TestLoadBalancerMarkServerDown(t *testing.T) {
 	}
 
 	// Check that DownUntil is set
-	found := false
-	for _, server := range config.Servers {
-		if server.URL == testutil.API1ExampleURL {
-			if server.DownUntil.IsZero() {
-				t.Error("DownUntil should be set for downed server")
-			}
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("Server not found in config")
+	downUntil := lb.GetServerDownUntil(testutil.API1ExampleURL)
+	if downUntil.IsZero() {
+		t.Error("DownUntil should be set for downed server")
 	}
 }
 

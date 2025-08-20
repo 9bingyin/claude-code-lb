@@ -242,27 +242,41 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 		logger.Debug("PROXY", "Response headers:\n%s", respHeaders.String())
 	}
 
-	// 始终读取响应体用于 Token 统计和错误处理
-	var responseBody []byte
-	var responseReader io.Reader = resp.Body
+	// 使用 TeeReader 同时进行统计和流式传输
+	var responseBody bytes.Buffer
+	var responseReader io.Reader
 
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		logger.Error("PROXY", "Failed to read response body: %v", err)
-		return false
+	// 检查是否为流式响应
+	isStreaming := strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream")
+
+	if isStreaming {
+		// 流式响应：使用 TeeReader 同时收集数据和传输
+		responseReader = io.TeeReader(resp.Body, &responseBody)
+	} else {
+		// 非流式响应：先读取完整响应体
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			logger.Error("PROXY", "Failed to read response body: %v", err)
+			return false
+		}
+		responseBody.Write(bodyBytes)
+		responseReader = bytes.NewReader(bodyBytes)
 	}
-	responseBody = bodyBytes
-	responseReader = bytes.NewReader(bodyBytes)
 
-	// Debug 模式下记录完整原始响应
-	if debugMode {
-		logger.Debug("PROXY", "Raw response body:\n%s", string(responseBody))
+	// Debug 模式下记录完整原始响应（仅限非流式响应）
+	if debugMode && !isStreaming {
+		logger.Debug("PROXY", "Raw response body:\n%s", responseBody.String())
 	}
 
 	// 检查响应状态，如果是5xx错误或429速率限制，标记服务器为不可用
 	if resp.StatusCode >= 500 || resp.StatusCode == 429 {
-		// 使用已读取的响应体
-		errorDetail := strings.TrimSpace(string(responseBody))
+		// 对于非流式响应，使用已读取的响应体
+		var errorDetail string
+		if !isStreaming {
+			errorDetail = strings.TrimSpace(responseBody.String())
+		} else {
+			errorDetail = "streaming response error"
+		}
 
 		// 清理换行符，使日志更紧凑
 		errorDetail = strings.ReplaceAll(errorDetail, "\n", " ")
@@ -294,8 +308,17 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 
 	// 记录响应日志
 	if resp.StatusCode == 200 {
-		// 始终解析 usage 信息以增强日志
-		model, usage, parseSuccess := parseUsageInfo(responseBody, resp.Header.Get("Content-Type"))
+		// 对于非流式响应，直接解析统计信息
+		var model string
+		var usage types.ClaudeUsage
+		var parseSuccess bool
+
+		if !isStreaming {
+			model, usage, parseSuccess = parseUsageInfo(responseBody.Bytes(), resp.Header.Get("Content-Type"))
+		} else {
+			// 流式响应的统计会在后续处理
+			parseSuccess = true
+		}
 
 		if parseSuccess && model != "" {
 			logger.Success("PROXY", "Success: %s | Status: %d (%dms) | Model: %s | Input: %d | Output: %d | Cache Create: %d | Cache Read: %d",
@@ -325,16 +348,22 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 
 	c.Status(resp.StatusCode)
 
-	// 处理流式响应
-	if strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
+	// 处理响应转发
+	if isStreaming {
+		// 流式响应处理
 		c.Header("Content-Type", "text/event-stream")
 		c.Header("Cache-Control", "no-cache")
 		c.Header("Connection", "keep-alive")
 
+		// 流式转发数据，同时收集统计信息
 		buffer := make([]byte, 1024)
 		for {
 			n, err := responseReader.Read(buffer)
 			if n > 0 {
+				// DEBUG 模式下记录每个数据块
+				if debugMode {
+					logger.Debug("PROXY", "Streaming chunk (%d bytes): %s", n, string(buffer[:n]))
+				}
 				c.Writer.Write(buffer[:n])
 				c.Writer.Flush()
 			}
@@ -342,9 +371,25 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 				break
 			}
 		}
+
+		// 流式响应完成后解析统计信息
+		if responseBody.Len() > 0 {
+			// DEBUG 模式下输出完整流式响应体
+			if debugMode {
+				logger.Debug("PROXY", "Complete streaming response body (%d bytes):\n%s",
+					responseBody.Len(), responseBody.String())
+			}
+
+			model, usage, parseSuccess := parseUsageInfo(responseBody.Bytes(), resp.Header.Get("Content-Type"))
+			if parseSuccess && model != "" {
+				logger.Success("PROXY", "Streaming Success: %s | Status: %d (%dms) | Model: %s | Input: %d | Output: %d | Cache Create: %d | Cache Read: %d",
+					fullRequestURL, resp.StatusCode, responseTime.Milliseconds(),
+					model, usage.InputTokens, usage.OutputTokens, usage.CacheCreationInputTokens, usage.CacheReadInputTokens)
+			}
+		}
 	} else {
 		// 对于非流式响应，使用已读取的响应体
-		c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), responseBody)
+		c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), responseBody.Bytes())
 	}
 
 	return true // 请求成功
