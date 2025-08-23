@@ -100,10 +100,10 @@ func DebugMultiline(category string, title string, content string) {
 	defer logMutex.Unlock()
 	timestamp := formatTimestamp()
 	categoryFormatted := fmt.Sprintf("%s%5s%s", ColorPurple, category, ColorReset)
-	
+
 	// 标题行
 	log.Printf("%s [%s] %s:", timestamp, categoryFormatted, title)
-	
+
 	// 内容行，每行添加2空格缩进
 	lines := strings.Split(content, "\n")
 	for _, line := range lines {
