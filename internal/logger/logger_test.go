@@ -26,20 +26,34 @@ func TestSetDebugMode(t *testing.T) {
 func TestFormatTimestamp(t *testing.T) {
 	timestamp := formatTimestamp()
 
-	// Check format - should be HH:MM:SS.mmm
-	if len(timestamp) != 12 {
-		t.Errorf("Expected timestamp length 12, got %d", len(timestamp))
+	// Check total length with color codes
+	if len(timestamp) != 21 {
+		t.Errorf("Expected timestamp length 21 (with colors), got %d", len(timestamp))
+	}
+
+	// Check color codes
+	if !strings.HasPrefix(timestamp, ColorGray) || !strings.HasSuffix(timestamp, ColorReset) {
+		t.Errorf("Timestamp should have gray color codes: %s", timestamp)
+	}
+
+	// Extract plain timestamp (remove color codes)
+	plainTimestamp := strings.TrimPrefix(timestamp, ColorGray)
+	plainTimestamp = strings.TrimSuffix(plainTimestamp, ColorReset)
+
+	// Check plain timestamp format - should be HH:MM:SS.mmm
+	if len(plainTimestamp) != 12 {
+		t.Errorf("Expected plain timestamp length 12, got %d", len(plainTimestamp))
 	}
 
 	// Check format structure
-	if timestamp[2] != ':' || timestamp[5] != ':' || timestamp[8] != '.' {
-		t.Errorf("Timestamp format incorrect: %s", timestamp)
+	if plainTimestamp[2] != ':' || plainTimestamp[5] != ':' || plainTimestamp[8] != '.' {
+		t.Errorf("Timestamp format incorrect: %s", plainTimestamp)
 	}
 
 	// Parse to verify it's a valid time
-	_, err := time.Parse("15:04:05.000", timestamp)
+	_, err := time.Parse("15:04:05.000", plainTimestamp)
 	if err != nil {
-		t.Errorf("Invalid timestamp format: %s, error: %v", timestamp, err)
+		t.Errorf("Invalid timestamp format: %s, error: %v", plainTimestamp, err)
 	}
 }
 

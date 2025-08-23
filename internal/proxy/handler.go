@@ -192,7 +192,19 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 		Timeout: 60 * time.Second,
 	}
 
-	req, err := http.NewRequest(c.Request.Method, target, c.Request.Body)
+	// 读取请求体内容用于调试和转发
+	var requestBody []byte
+	var err error
+	if c.Request.Body != nil {
+		requestBody, err = io.ReadAll(c.Request.Body)
+		if err != nil {
+			logger.Error("PROXY", "Failed to read request body: %v", err)
+			return false
+		}
+		c.Request.Body.Close()
+	}
+
+	req, err := http.NewRequest(c.Request.Method, target, bytes.NewReader(requestBody))
 	if err != nil {
 		logger.Error("PROXY", "Failed to create request: %v", err)
 		return false
@@ -223,6 +235,16 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 
 	// Debug 模式下记录请求和响应头
 	if debugMode {
+		// 请求概览信息
+		requestOverview := fmt.Sprintf("Method: %s\nURL: %s\nContent-Type: %s\nContent-Length: %d bytes\nClient IP: %s",
+			c.Request.Method,
+			fullRequestURL,
+			c.Request.Header.Get("Content-Type"),
+			len(requestBody),
+			c.ClientIP(),
+		)
+		logger.DebugMultiline("PROXY", "Request Overview", requestOverview)
+
 		// 记录请求头
 		var reqHeaders strings.Builder
 		for key, values := range req.Header {
@@ -231,6 +253,18 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 			}
 		}
 		logger.DebugMultiline("PROXY", "Request Headers", strings.TrimSpace(reqHeaders.String()))
+
+		// 记录请求体
+		if len(requestBody) > 0 {
+			contentType := c.Request.Header.Get("Content-Type")
+			if strings.Contains(contentType, "application/json") {
+				// JSON格式化显示
+				logger.DebugJSON("PROXY", "Request Body", requestBody)
+			} else {
+				// 普通文本显示
+				logger.DebugMultiline("PROXY", fmt.Sprintf("Request Body (%d bytes)", len(requestBody)), string(requestBody))
+			}
+		}
 
 		// 记录响应头
 		var respHeaders strings.Builder

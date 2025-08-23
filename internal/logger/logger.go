@@ -32,7 +32,8 @@ func SetDebugMode(enabled bool) {
 }
 
 func formatTimestamp() string {
-	return time.Now().Format("15:04:05.000")
+	timestamp := time.Now().Format("15:04:05.000")
+	return fmt.Sprintf("%s%s%s", ColorGray, timestamp, ColorReset)
 }
 
 func Info(category string, message string, args ...interface{}) {
