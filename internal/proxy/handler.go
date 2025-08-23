@@ -230,7 +230,7 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 				reqHeaders.WriteString(fmt.Sprintf("%s: %s\n", key, value))
 			}
 		}
-		logger.Debug("PROXY", "Request headers:\n%s", reqHeaders.String())
+		logger.DebugMultiline("PROXY", "Request Headers", strings.TrimSpace(reqHeaders.String()))
 
 		// 记录响应头
 		var respHeaders strings.Builder
@@ -239,7 +239,7 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 				respHeaders.WriteString(fmt.Sprintf("%s: %s\n", key, value))
 			}
 		}
-		logger.Debug("PROXY", "Response headers:\n%s", respHeaders.String())
+		logger.DebugMultiline("PROXY", "Response Headers", strings.TrimSpace(respHeaders.String()))
 	}
 
 	// 使用 TeeReader 同时进行统计和流式传输
@@ -265,7 +265,17 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 
 	// Debug 模式下记录完整原始响应（仅限非流式响应）
 	if debugMode && !isStreaming {
-		logger.Debug("PROXY", "Raw response body:\n%s", responseBody.String())
+		responseContent := responseBody.String()
+		if responseContent != "" {
+			// 检查是否为JSON格式并尝试格式化
+			if strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
+				if jsonBytes := responseBody.Bytes(); len(jsonBytes) > 0 {
+					logger.DebugJSON("PROXY", "Response Body", jsonBytes)
+				}
+			} else {
+				logger.DebugMultiline("PROXY", fmt.Sprintf("Response Body (%d bytes)", responseBody.Len()), responseContent)
+			}
+		}
 	}
 
 	// 检查响应状态，如果是5xx错误或429速率限制，标记服务器为不可用
@@ -362,7 +372,10 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 			if n > 0 {
 				// DEBUG 模式下记录每个数据块
 				if debugMode {
-					logger.Debug("PROXY", "Streaming chunk (%d bytes): %s", n, string(buffer[:n]))
+					chunkData := strings.TrimSpace(string(buffer[:n]))
+					if chunkData != "" {
+						logger.DebugMultiline("PROXY", fmt.Sprintf("Stream Chunk (%d bytes)", n), chunkData)
+					}
 				}
 				c.Writer.Write(buffer[:n])
 				c.Writer.Flush()
@@ -376,8 +389,10 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 		if responseBody.Len() > 0 {
 			// DEBUG 模式下输出完整流式响应体
 			if debugMode {
-				logger.Debug("PROXY", "Complete streaming response body (%d bytes):\n%s",
-					responseBody.Len(), responseBody.String())
+				responseContent := strings.TrimSpace(responseBody.String())
+				if responseContent != "" {
+					logger.DebugMultiline("PROXY", fmt.Sprintf("Complete streaming response body (%d bytes)", responseBody.Len()), responseContent)
+				}
 			}
 
 			model, usage, parseSuccess := parseUsageInfo(responseBody.Bytes(), resp.Header.Get("Content-Type"))
