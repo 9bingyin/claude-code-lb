@@ -225,15 +225,7 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 		}
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		logger.Error("PROXY", "Request failed: %s | Error: %v", fullRequestURL, err)
-		balancer.MarkServerDown(server.URL)
-		return false
-	}
-	defer resp.Body.Close()
-
-	// Debug 模式下记录请求和响应头
+	// Debug 模式下记录请求详细信息
 	if debugMode {
 		// 请求概览信息
 		requestOverview := fmt.Sprintf("Method: %s\nURL: %s\nContent-Type: %s\nContent-Length: %d bytes\nClient IP: %s",
@@ -265,7 +257,18 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 				logger.DebugMultiline("PROXY", fmt.Sprintf("Request Body (%d bytes)", len(requestBody)), string(requestBody))
 			}
 		}
+	}
 
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Error("PROXY", "Request failed: %s | Error: %v", fullRequestURL, err)
+		balancer.MarkServerDown(server.URL)
+		return false
+	}
+	defer resp.Body.Close()
+
+	// Debug 模式下记录响应头
+	if debugMode {
 		// 记录响应头
 		var respHeaders strings.Builder
 		for key, values := range resp.Header {
