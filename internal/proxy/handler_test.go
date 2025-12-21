@@ -15,42 +15,68 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func TestGetHopByHopHeaders(t *testing.T) {
+func TestRemoveHopByHopHeaders(t *testing.T) {
 	tests := []struct {
-		name             string
-		connectionHeader string
-		expectedHeaders  []string
+		name            string
+		inputHeaders    http.Header
+		expectedRemoved []string
+		expectedKept    []string
 	}{
 		{
-			name:             "empty connection header",
-			connectionHeader: "",
-			expectedHeaders:  []string{"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade"},
+			name: "standard hop-by-hop headers",
+			inputHeaders: http.Header{
+				"Connection":          []string{"keep-alive"},
+				"Keep-Alive":          []string{"timeout=5"},
+				"Transfer-Encoding":   []string{"chunked"},
+				"Upgrade":             []string{"websocket"},
+				"Content-Type":        []string{"application/json"},
+				"X-Custom-Header":     []string{"value"},
+			},
+			expectedRemoved: []string{"Connection", "Keep-Alive", "Transfer-Encoding", "Upgrade"},
+			expectedKept:    []string{"Content-Type", "X-Custom-Header"},
 		},
 		{
-			name:             "connection header with custom headers",
-			connectionHeader: "close, x-custom-header",
-			expectedHeaders:  []string{"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade", "x-custom-header"},
+			name: "connection header with custom headers",
+			inputHeaders: http.Header{
+				"Connection":      []string{"close, X-Custom-Header"},
+				"X-Custom-Header": []string{"should-be-removed"},
+				"Content-Type":    []string{"application/json"},
+			},
+			expectedRemoved: []string{"Connection", "X-Custom-Header"},
+			expectedKept:    []string{"Content-Type"},
 		},
 		{
-			name:             "connection header with keep-alive",
-			connectionHeader: "keep-alive",
-			expectedHeaders:  []string{"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade"},
-		},
-		{
-			name:             "connection header with multiple custom headers",
-			connectionHeader: "x-header1, x-header2, close",
-			expectedHeaders:  []string{"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade", "x-header1", "x-header2"},
+			name: "no hop-by-hop headers",
+			inputHeaders: http.Header{
+				"Content-Type":    []string{"application/json"},
+				"Authorization":   []string{"Bearer token"},
+			},
+			expectedRemoved: []string{},
+			expectedKept:    []string{"Content-Type", "Authorization"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			headers := getHopByHopHeaders(tt.connectionHeader)
+			// Clone headers to avoid modifying the test case
+			headers := make(http.Header)
+			for k, v := range tt.inputHeaders {
+				headers[k] = v
+			}
 
-			// Check that all expected headers are present
-			for _, expectedHeader := range tt.expectedHeaders {
-				if !headers[expectedHeader] {
-					t.Errorf("Expected header %s to be in hop-by-hop headers", expectedHeader)
+			removeHopByHopHeaders(headers)
+
+			// Check that expected headers are removed
+			for _, header := range tt.expectedRemoved {
+				if headers.Get(header) != "" {
+					t.Errorf("Expected header %s to be removed, but it's still present", header)
+				}
+			}
+
+			// Check that expected headers are kept
+			for _, header := range tt.expectedKept {
+				if headers.Get(header) == "" {
+					t.Errorf("Expected header %s to be kept, but it was removed", header)
 				}
 			}
 		})
