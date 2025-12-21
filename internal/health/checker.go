@@ -31,7 +31,10 @@ func (h *Checker) PassiveHealthCheck() {
 
 		for _, server := range h.config.Servers {
 			// 检查冷却时间是否已到期
-			if !serverStatus[server.URL] && now.After(server.DownUntil) {
+			// 注意：使用 balancer.GetServerDownUntil 获取实际的冷却时间
+			// 而不是 server.DownUntil（那是配置中的零值）
+			downUntil := h.balancer.GetServerDownUntil(server.URL)
+			if !serverStatus[server.URL] && now.After(downUntil) {
 				// 冷却时间已到期，重新标记为可用
 				h.balancer.RecoverServer(server.URL)
 				logger.Success("HEAL", "Server recovered: %s (cooldown expired)", server.URL)

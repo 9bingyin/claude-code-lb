@@ -1,6 +1,8 @@
 package selector
 
 import (
+	"time"
+
 	"claude-code-lb/pkg/types"
 )
 
@@ -21,6 +23,9 @@ type ServerSelector interface {
 
 	// GetServerStatus 获取服务器状态
 	GetServerStatus() map[string]bool
+
+	// GetServerDownUntil 获取服务器的冷却结束时间
+	GetServerDownUntil(url string) time.Time
 
 	// RecoverServer 恢复服务器
 	RecoverServer(url string)

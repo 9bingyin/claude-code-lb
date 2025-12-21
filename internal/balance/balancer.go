@@ -1,6 +1,8 @@
 package balance
 
 import (
+	"time"
+
 	"claude-code-lb/internal/logger"
 	"claude-code-lb/internal/selector"
 	"claude-code-lb/pkg/types"
@@ -67,4 +69,9 @@ func (b *Balancer) RecoverServer(url string) {
 // MarkServerHealthy 标记服务器为健康
 func (b *Balancer) MarkServerHealthy(url string) {
 	b.selector.MarkServerHealthy(url)
+}
+
+// GetServerDownUntil 获取服务器的冷却结束时间
+func (b *Balancer) GetServerDownUntil(url string) time.Time {
+	return b.selector.GetServerDownUntil(url)
 }

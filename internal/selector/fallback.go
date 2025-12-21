@@ -81,7 +81,8 @@ func (fs *FallbackSelector) SelectServer() (*types.UpstreamServer, error) {
 	// 按优先级顺序查找可用服务器
 	for i, server := range fs.orderedServers {
 		// 检查服务器是否可用且未在冷却期
-		if fs.serverStatus[server.URL] && now.After(server.DownUntil) {
+		// 注意：使用 serverDownUntil map 而不是 server.DownUntil（后者是配置的零值）
+		if fs.serverStatus[server.URL] && now.After(fs.serverDownUntil[server.URL]) {
 			logger.Info("LOAD", "Selected server by priority %d: %s", i+1, server.URL)
 			return &fs.orderedServers[i], nil
 		}
@@ -106,13 +107,14 @@ func (fs *FallbackSelector) getEmergencyFallbackServer() *types.UpstreamServer {
 
 	// 优先考虑按优先级排序的服务器
 	for i, server := range fs.orderedServers {
-		if now.After(server.DownUntil) {
+		downUntil := fs.serverDownUntil[server.URL]
+		if now.After(downUntil) {
 			// 如果已经过了冷却时间，直接选择
 			return &fs.orderedServers[i]
 		}
 
 		// 找到冷却时间最短的服务器
-		cooldownRemaining := server.DownUntil.Sub(now)
+		cooldownRemaining := downUntil.Sub(now)
 		if cooldownRemaining < shortestCooldown {
 			shortestCooldown = cooldownRemaining
 			bestServer = &fs.orderedServers[i]
@@ -200,6 +202,13 @@ func (fs *FallbackSelector) GetServerStatus() map[string]bool {
 		status[k] = v
 	}
 	return status
+}
+
+// GetServerDownUntil 获取服务器的冷却结束时间
+func (fs *FallbackSelector) GetServerDownUntil(url string) time.Time {
+	fs.statusMutex.RLock()
+	defer fs.statusMutex.RUnlock()
+	return fs.serverDownUntil[url]
 }
 
 // RecoverServer 恢复服务器

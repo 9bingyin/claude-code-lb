@@ -10,21 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 辅助函数
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 // Middleware 鉴权中间件
 func Middleware(config types.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
