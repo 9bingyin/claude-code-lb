@@ -342,8 +342,8 @@ func TestHandlerNoAvailableServers(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("invalid JSON response: %v", err)
 	}
-	if response["error"] != "No available servers" {
-		t.Errorf("Expected error message 'No available servers', got %s", response["error"])
+	if response["error"] != "All servers failed" {
+		t.Errorf("Expected error message 'All servers failed', got %s", response["error"])
 	}
 }
 

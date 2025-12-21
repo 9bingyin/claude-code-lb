@@ -3,7 +3,6 @@ package selector
 import (
 	"errors"
 	"sort"
-	"sync"
 	"time"
 
 	"claude-code-lb/internal/logger"
@@ -12,39 +11,14 @@ import (
 
 // FallbackSelector fallback选择器
 type FallbackSelector struct {
-	config              types.Config
-	serverStatus        map[string]bool
-	serverDownUntil     map[string]time.Time // 服务器冷却时间
-	statusMutex         sync.RWMutex
-	failureCount        map[string]int64       // 服务器失败次数（用于动态冷却）
-	consecutiveFailures map[string]int         // 连续失败次数（用于失败阈值判断）
-	serverThresholds    map[string]int         // 每个服务器的失败阈值
-	orderedServers      []types.UpstreamServer // 按优先级排序的服务器列表
+	*BaseSelector                          // 嵌入基础选择器
+	orderedServers []types.UpstreamServer  // 按优先级排序的服务器列表
 }
 
 // NewFallbackSelector 创建新的fallback选择器
 func NewFallbackSelector(config types.Config) *FallbackSelector {
 	fs := &FallbackSelector{
-		config:              config,
-		serverStatus:        make(map[string]bool),
-		serverDownUntil:     make(map[string]time.Time),
-		failureCount:        make(map[string]int64),
-		consecutiveFailures: make(map[string]int),
-		serverThresholds:    make(map[string]int),
-	}
-
-	// 初始化服务器状态
-	for _, server := range config.Servers {
-		fs.serverStatus[server.URL] = true
-		fs.serverDownUntil[server.URL] = time.Time{}
-		fs.failureCount[server.URL] = 0
-		fs.consecutiveFailures[server.URL] = 0
-		// 设置失败阈值，默认为1（保持原有行为）
-		threshold := server.FailThreshold
-		if threshold <= 0 {
-			threshold = 1
-		}
-		fs.serverThresholds[server.URL] = threshold
+		BaseSelector: NewBaseSelector(config, "LOAD"),
 	}
 
 	// 对服务器按优先级排序
@@ -75,14 +49,13 @@ func NewFallbackSelector(config types.Config) *FallbackSelector {
 func (fs *FallbackSelector) SelectServer() (*types.UpstreamServer, error) {
 	now := time.Now()
 
-	fs.statusMutex.RLock()
-	defer fs.statusMutex.RUnlock()
+	fs.RLock()
+	defer fs.RUnlock()
 
 	// 按优先级顺序查找可用服务器
 	for i, server := range fs.orderedServers {
 		// 检查服务器是否可用且未在冷却期
-		// 注意：使用 serverDownUntil map 而不是 server.DownUntil（后者是配置的零值）
-		if fs.serverStatus[server.URL] && now.After(fs.serverDownUntil[server.URL]) {
+		if fs.IsServerAvailable(server.URL, now) {
 			logger.Info("LOAD", "Selected server by priority %d: %s", i+1, server.URL)
 			return &fs.orderedServers[i], nil
 		}
@@ -124,130 +97,21 @@ func (fs *FallbackSelector) getEmergencyFallbackServer() *types.UpstreamServer {
 	return bestServer
 }
 
-// MarkServerDown 标记服务器为不可用
-func (fs *FallbackSelector) MarkServerDown(url string, strict bool) {
-	fs.statusMutex.Lock()
-	defer fs.statusMutex.Unlock()
-
-	// 增加连续失败计数
-	fs.consecutiveFailures[url]++
-	consecutiveFailures := fs.consecutiveFailures[url]
-	threshold := fs.serverThresholds[url]
-
-	// 检查是否达到失败阈值
-	// 如果 strict 为 true，则忽略阈值直接标记失败
-	if !strict && consecutiveFailures < threshold {
-		logger.Warning("LOAD", "Server %s failed (%d/%d), not marking down yet", url, consecutiveFailures, threshold)
-		return
-	}
-
-	fs.serverStatus[url] = false
-
-	// 增加失败计数（用于动态冷却）
-	fs.failureCount[url]++
-	failures := fs.failureCount[url]
-
-	// 动态计算冷却时间
-	cooldownDuration := time.Duration(fs.config.Cooldown) * time.Second
-	if failures > 1 {
-		// 指数退避，但设置上限
-		dynamicCooldown := cooldownDuration * time.Duration(failures)
-		if dynamicCooldown > 10*time.Minute {
-			dynamicCooldown = 10 * time.Minute // 最大 10 分钟
-		}
-		cooldownDuration = dynamicCooldown
-	}
-
-	downUntil := time.Now().Add(cooldownDuration)
-
-	// 记录服务器冷却时间（统一管理，避免重复维护）
-	fs.serverDownUntil[url] = downUntil
-
-	// 重置连续失败计数
-	fs.consecutiveFailures[url] = 0
-
-	logger.Warning("LOAD", "Server marked down: %s (threshold: %d, total failures: %d, cooldown: %v)", url, threshold, failures, cooldownDuration)
-}
-
 // GetAvailableServers 获取所有可用服务器（按优先级排序）
 func (fs *FallbackSelector) GetAvailableServers() []types.UpstreamServer {
 	now := time.Now()
 	var available []types.UpstreamServer
 
-	fs.statusMutex.RLock()
-	defer fs.statusMutex.RUnlock()
+	fs.RLock()
+	defer fs.RUnlock()
 
 	for _, server := range fs.orderedServers {
-		if fs.isServerAvailable(server.URL, now) {
+		if fs.IsServerAvailable(server.URL, now) {
 			available = append(available, server)
 		}
 	}
 
 	return available
-}
-
-// isServerAvailable 统一的服务器可用性判断逻辑
-func (fs *FallbackSelector) isServerAvailable(url string, now time.Time) bool {
-	// 检查服务器状态和冷却时间
-	return fs.serverStatus[url] && now.After(fs.serverDownUntil[url])
-}
-
-// GetServerStatus 获取服务器状态
-func (fs *FallbackSelector) GetServerStatus() map[string]bool {
-	fs.statusMutex.RLock()
-	defer fs.statusMutex.RUnlock()
-
-	status := make(map[string]bool)
-	for k, v := range fs.serverStatus {
-		status[k] = v
-	}
-	return status
-}
-
-// GetServerDownUntil 获取服务器的冷却结束时间
-func (fs *FallbackSelector) GetServerDownUntil(url string) time.Time {
-	fs.statusMutex.RLock()
-	defer fs.statusMutex.RUnlock()
-	return fs.serverDownUntil[url]
-}
-
-// RecoverServer 恢复服务器
-func (fs *FallbackSelector) RecoverServer(url string) {
-	fs.statusMutex.Lock()
-	defer fs.statusMutex.Unlock()
-
-	fs.serverStatus[url] = true
-
-	// 清除冷却时间
-	fs.serverDownUntil[url] = time.Time{}
-
-	logger.Success("LOAD", "Server recovered: %s", url)
-}
-
-// MarkServerHealthy 标记服务器为健康
-func (fs *FallbackSelector) MarkServerHealthy(url string) {
-	fs.statusMutex.Lock()
-	defer fs.statusMutex.Unlock()
-
-	// 重置连续失败计数
-	if fs.consecutiveFailures[url] > 0 {
-		fs.consecutiveFailures[url] = 0
-	}
-
-	// 重置失败计数
-	if fs.failureCount[url] > 0 {
-		oldFailures := fs.failureCount[url]
-		fs.failureCount[url] = 0
-		logger.Info("LOAD", "Server %s healthy, reset failure count (was %d)", url, oldFailures)
-	}
-
-	// 确保服务器状态为可用
-	if !fs.serverStatus[url] {
-		fs.serverStatus[url] = true
-		// 清除冷却时间
-		fs.serverDownUntil[url] = time.Time{}
-		logger.Success("LOAD", "Server %s auto-recovered from healthy request", url)
-	}
 }
 
 // assignUniquePriorities 为服务器分配唯一优先级

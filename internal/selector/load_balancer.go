@@ -13,47 +13,26 @@ import (
 
 // LoadBalancer 负载均衡选择器
 type LoadBalancer struct {
-	config              types.Config
-	currentServerIndex  int64 // 轮询索引
-	serverMutex         sync.Mutex
-	serverStatus        map[string]bool
-	serverWeights       map[string]int       // 用于平滑加权轮询
-	serverDownUntil     map[string]time.Time // 服务器冷却时间
-	statusMutex         sync.RWMutex
-	failureCount        map[string]int64 // 服务器失败次数（用于动态冷却）
-	consecutiveFailures map[string]int   // 连续失败次数（用于失败阈值判断）
-	serverThresholds    map[string]int   // 每个服务器的失败阈值
+	*BaseSelector                  // 嵌入基础选择器
+	currentServerIndex int64       // 轮询索引
+	serverMutex        sync.Mutex
+	serverWeights      map[string]int // 用于平滑加权轮询
 }
 
 // NewLoadBalancer 创建新的负载均衡选择器
 func NewLoadBalancer(config types.Config) *LoadBalancer {
 	lb := &LoadBalancer{
-		config:              config,
-		serverStatus:        make(map[string]bool),
-		serverWeights:       make(map[string]int),
-		serverDownUntil:     make(map[string]time.Time),
-		failureCount:        make(map[string]int64),
-		consecutiveFailures: make(map[string]int),
-		serverThresholds:    make(map[string]int),
+		BaseSelector:  NewBaseSelector(config, "LOAD"),
+		serverWeights: make(map[string]int),
 	}
 
-	// 初始化服务器状态和权重
+	// 初始化权重
 	for _, server := range config.Servers {
-		lb.serverStatus[server.URL] = true
 		weight := server.Weight
 		if weight <= 0 {
 			weight = 1
 		}
 		lb.serverWeights[server.URL] = weight
-		lb.serverDownUntil[server.URL] = time.Time{}
-		lb.failureCount[server.URL] = 0
-		lb.consecutiveFailures[server.URL] = 0
-		// 设置失败阈值，默认为1（保持原有行为）
-		threshold := server.FailThreshold
-		if threshold <= 0 {
-			threshold = 1
-		}
-		lb.serverThresholds[server.URL] = threshold
 	}
 
 	logger.Info("LOAD", "Load balancer initialized with algorithm: %s", config.Algorithm)
@@ -71,9 +50,9 @@ func (lb *LoadBalancer) SelectServer() (*types.UpstreamServer, error) {
 	var selectedServer *types.UpstreamServer
 
 	switch lb.config.Algorithm {
-	case "weighted_round_robin":
+	case types.AlgorithmWeightedRoundRobin:
 		selectedServer = lb.getWeightedServer(availableServers)
-	case "random":
+	case types.AlgorithmRandom:
 		selectedServer = lb.getRandomServer(availableServers)
 	default: // round_robin
 		selectedServer = lb.getRoundRobinServer(availableServers)
@@ -169,128 +148,19 @@ func (lb *LoadBalancer) getRandomServer(servers []types.UpstreamServer) *types.U
 	return &servers[n.Int64()]
 }
 
-// MarkServerDown 标记服务器为不可用
-func (lb *LoadBalancer) MarkServerDown(url string, strict bool) {
-	lb.statusMutex.Lock()
-	defer lb.statusMutex.Unlock()
-
-	// 增加连续失败计数
-	lb.consecutiveFailures[url]++
-	consecutiveFailures := lb.consecutiveFailures[url]
-	threshold := lb.serverThresholds[url]
-
-	// 检查是否达到失败阈值
-	// 如果 strict 为 true，则忽略阈值直接标记失败
-	if !strict && consecutiveFailures < threshold {
-		logger.Warning("LOAD", "Server %s failed (%d/%d), not marking down yet", url, consecutiveFailures, threshold)
-		return
-	}
-
-	lb.serverStatus[url] = false
-
-	// 增加失败计数（用于动态冷却）
-	lb.failureCount[url]++
-	failures := lb.failureCount[url]
-
-	// 动态计算冷却时间（指数退避）
-	cooldownDuration := time.Duration(lb.config.Cooldown) * time.Second
-	if failures > 1 {
-		// 指数退避，但设置上限
-		dynamicCooldown := cooldownDuration * time.Duration(failures)
-		if dynamicCooldown > 10*time.Minute {
-			dynamicCooldown = 10 * time.Minute // 最大 10 分钟
-		}
-		cooldownDuration = dynamicCooldown
-	}
-
-	downUntil := time.Now().Add(cooldownDuration)
-
-	// 记录服务器冷却时间（使用内部字段，不修改共享配置）
-	lb.serverDownUntil[url] = downUntil
-
-	// 重置连续失败计数
-	lb.consecutiveFailures[url] = 0
-
-	logger.Warning("LOAD", "Server marked down: %s (threshold: %d, total failures: %d, cooldown: %v)", url, threshold, failures, cooldownDuration)
-}
-
 // GetAvailableServers 获取所有可用服务器
 func (lb *LoadBalancer) GetAvailableServers() []types.UpstreamServer {
 	now := time.Now()
 	var available []types.UpstreamServer
 
-	lb.statusMutex.RLock()
-	defer lb.statusMutex.RUnlock()
+	lb.RLock()
+	defer lb.RUnlock()
 
 	for _, server := range lb.config.Servers {
-		if lb.isServerAvailable(server.URL, now) {
+		if lb.IsServerAvailable(server.URL, now) {
 			available = append(available, server)
 		}
 	}
 
 	return available
-}
-
-// isServerAvailable 统一的服务器可用性判断逻辑
-func (lb *LoadBalancer) isServerAvailable(url string, now time.Time) bool {
-	// 检查服务器状态和冷却时间
-	return lb.serverStatus[url] && now.After(lb.serverDownUntil[url])
-}
-
-// GetServerStatus 获取服务器状态
-func (lb *LoadBalancer) GetServerStatus() map[string]bool {
-	lb.statusMutex.RLock()
-	defer lb.statusMutex.RUnlock()
-
-	status := make(map[string]bool)
-	for k, v := range lb.serverStatus {
-		status[k] = v
-	}
-	return status
-}
-
-// GetServerDownUntil 获取服务器的冷却结束时间
-func (lb *LoadBalancer) GetServerDownUntil(url string) time.Time {
-	lb.statusMutex.RLock()
-	defer lb.statusMutex.RUnlock()
-	return lb.serverDownUntil[url]
-}
-
-// RecoverServer 恢复服务器
-func (lb *LoadBalancer) RecoverServer(url string) {
-	lb.statusMutex.Lock()
-	defer lb.statusMutex.Unlock()
-
-	lb.serverStatus[url] = true
-
-	// 清除冷却时间
-	lb.serverDownUntil[url] = time.Time{}
-
-	logger.Success("LOAD", "Server recovered: %s", url)
-}
-
-// MarkServerHealthy 标记服务器为健康
-func (lb *LoadBalancer) MarkServerHealthy(url string) {
-	lb.statusMutex.Lock()
-	defer lb.statusMutex.Unlock()
-
-	// 重置连续失败计数
-	if lb.consecutiveFailures[url] > 0 {
-		lb.consecutiveFailures[url] = 0
-	}
-
-	// 重置失败计数
-	if lb.failureCount[url] > 0 {
-		oldFailures := lb.failureCount[url]
-		lb.failureCount[url] = 0
-		logger.Info("LOAD", "Server %s healthy, reset failure count (was %d)", url, oldFailures)
-	}
-
-	// 确保服务器状态为可用
-	if !lb.serverStatus[url] {
-		lb.serverStatus[url] = true
-		// 清除冷却时间
-		lb.serverDownUntil[url] = time.Time{}
-		logger.Success("LOAD", "Server %s auto-recovered from healthy request", url)
-	}
 }

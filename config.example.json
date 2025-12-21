@@ -3,6 +3,18 @@
   "mode": "load_balance",
   "algorithm": "weighted_round_robin",
   "debug": false,
+  "max_retries": 2,
+  "http_client": {
+    "dial_timeout": 10,
+    "keep_alive": 30,
+    "max_idle_conns": 100,
+    "max_idle_conns_per_host": 20,
+    "idle_conn_timeout": 120,
+    "response_header_timeout": 30,
+    "tls_handshake_timeout": 10,
+    "write_buffer_size": 4096,
+    "read_buffer_size": 4096
+  },
   "servers": [
     {
       "url": "https://api.primary-server.com",
