@@ -23,7 +23,7 @@ func NewMockBalancer() *MockBalancer {
 }
 
 // MarkServerDown 标记服务器为不可用
-func (m *MockBalancer) MarkServerDown(url string) {
+func (m *MockBalancer) MarkServerDown(url string, strict bool) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.downServers[url] = true

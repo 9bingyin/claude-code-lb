@@ -136,7 +136,7 @@ func TestFallbackSelectorWithFailover(t *testing.T) {
 	}
 
 	// Mark priority 1 server as down
-	fs.MarkServerDown("http://test-api.local")
+	fs.MarkServerDown("http://test-api.local", true)
 
 	// Should now select priority 2 server
 	server, err = fs.SelectServer()
@@ -148,7 +148,7 @@ func TestFallbackSelectorWithFailover(t *testing.T) {
 	}
 
 	// Mark priority 2 server as down
-	fs.MarkServerDown("http://test-api.local")
+	fs.MarkServerDown("http://test-api.local", true)
 
 	// Should now select priority 3 server
 	server, err = fs.SelectServer()
@@ -172,7 +172,7 @@ func TestFallbackSelectorMarkServerDown(t *testing.T) {
 	fs := NewFallbackSelector(config)
 
 	// Mark server as down
-	fs.MarkServerDown("http://test-api.local")
+	fs.MarkServerDown("http://test-api.local", true)
 
 	// Check status
 	status := fs.GetServerStatus()
@@ -192,7 +192,7 @@ func TestFallbackSelectorMarkServerHealthy(t *testing.T) {
 	fs := NewFallbackSelector(config)
 
 	// Mark it down first
-	fs.MarkServerDown("http://test-api.local")
+	fs.MarkServerDown("http://test-api.local", true)
 
 	// Then mark it healthy
 	fs.MarkServerHealthy("http://test-api.local")
@@ -222,7 +222,7 @@ func TestFallbackSelectorGetAvailableServers(t *testing.T) {
 	}
 
 	// Mark one server as down
-	fs.MarkServerDown(testutil.API1ExampleURL)
+	fs.MarkServerDown(testutil.API1ExampleURL, true)
 
 	// Should have 1 available server
 	available = fs.GetAvailableServers()
@@ -246,7 +246,7 @@ func TestFallbackSelectorRecoverServer(t *testing.T) {
 	fs := NewFallbackSelector(config)
 
 	// Mark server as down
-	fs.MarkServerDown("http://test-api.local")
+	fs.MarkServerDown("http://test-api.local", true)
 
 	// Verify it's down
 	status := fs.GetServerStatus()
@@ -275,7 +275,7 @@ func TestFallbackSelectorNoAvailableServers(t *testing.T) {
 	fs := NewFallbackSelector(config)
 
 	// Mark all servers as down
-	fs.MarkServerDown("http://test-api.local")
+	fs.MarkServerDown("http://test-api.local", true)
 
 	// Should get an emergency fallback or error
 	server, err := fs.SelectServer()
@@ -303,8 +303,8 @@ func TestFallbackSelectorEmergencyFallback(t *testing.T) {
 	fs := NewFallbackSelector(config)
 
 	// Mark all servers as down
-	fs.MarkServerDown("http://test-api.local")
-	fs.MarkServerDown("http://test-api.local")
+	fs.MarkServerDown("http://test-api.local", true)
+	fs.MarkServerDown("http://test-api.local", true)
 
 	// Should get emergency fallback (server with shortest remaining cooldown)
 	server, err := fs.SelectServer()

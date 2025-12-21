@@ -188,7 +188,7 @@ func TestLoadBalancerImplementsInterface(t *testing.T) {
 	}
 
 	// Test other methods
-	lb.MarkServerDown("http://test-api.local")
+	lb.MarkServerDown("http://test-api.local", true)
 	lb.MarkServerHealthy("http://test-api.local")
 
 	servers := lb.GetAvailableServers()
@@ -225,7 +225,7 @@ func TestFallbackSelectorImplementsInterface(t *testing.T) {
 	}
 
 	// Test other methods
-	fs.MarkServerDown("http://test-api.local")
+	fs.MarkServerDown("http://test-api.local", true)
 	fs.MarkServerHealthy("http://test-api.local")
 
 	servers := fs.GetAvailableServers()

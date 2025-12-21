@@ -140,7 +140,7 @@ func TestBalancerMarkServerDown(t *testing.T) {
 	balancer := New(config)
 
 	// Mark a server as down
-	balancer.MarkServerDown("http://test-api1.local")
+	balancer.MarkServerDown("http://test-api1.local", true)
 
 	// Check server status
 	status := balancer.GetServerStatus()
@@ -164,7 +164,7 @@ func TestBalancerMarkServerHealthy(t *testing.T) {
 	balancer := New(config)
 
 	// Mark server as down first
-	balancer.MarkServerDown("http://test-api1.local")
+	balancer.MarkServerDown("http://test-api1.local", true)
 
 	// Verify it's down
 	status := balancer.GetServerStatus()
@@ -202,7 +202,7 @@ func TestBalancerGetAvailableServers(t *testing.T) {
 	}
 
 	// Mark one server as down
-	balancer.MarkServerDown("http://test-api2.local")
+	balancer.MarkServerDown("http://test-api2.local", true)
 
 	// Should have 2 available servers
 	available = balancer.GetAvailableServers()
@@ -244,7 +244,7 @@ func TestBalancerGetServerStatus(t *testing.T) {
 	}
 
 	// Mark a server as down and check status
-	balancer.MarkServerDown("http://test-api1.local")
+	balancer.MarkServerDown("http://test-api1.local", true)
 	status = balancer.GetServerStatus()
 
 	if status["http://test-api1.local"] {
@@ -267,7 +267,7 @@ func TestBalancerRecoverServer(t *testing.T) {
 	balancer := New(config)
 
 	// Mark server as down
-	balancer.MarkServerDown("http://test-api1.local")
+	balancer.MarkServerDown("http://test-api1.local", true)
 
 	// Verify it's down
 	status := balancer.GetServerStatus()
@@ -306,7 +306,7 @@ func TestBalancerIntegration(t *testing.T) {
 	serverUrl := server.URL
 
 	// Mark it down
-	balancer.MarkServerDown(serverUrl)
+	balancer.MarkServerDown(serverUrl, true)
 
 	// Should still be able to get a server (the other one)
 	server2, err := balancer.GetNextServer()

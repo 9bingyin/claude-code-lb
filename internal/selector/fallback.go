@@ -123,7 +123,7 @@ func (fs *FallbackSelector) getEmergencyFallbackServer() *types.UpstreamServer {
 }
 
 // MarkServerDown 标记服务器为不可用
-func (fs *FallbackSelector) MarkServerDown(url string) {
+func (fs *FallbackSelector) MarkServerDown(url string, strict bool) {
 	fs.statusMutex.Lock()
 	defer fs.statusMutex.Unlock()
 
@@ -133,7 +133,8 @@ func (fs *FallbackSelector) MarkServerDown(url string) {
 	threshold := fs.serverThresholds[url]
 
 	// 检查是否达到失败阈值
-	if consecutiveFailures < threshold {
+	// 如果 strict 为 true，则忽略阈值直接标记失败
+	if !strict && consecutiveFailures < threshold {
 		logger.Warning("LOAD", "Server %s failed (%d/%d), not marking down yet", url, consecutiveFailures, threshold)
 		return
 	}

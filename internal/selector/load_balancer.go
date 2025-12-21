@@ -170,7 +170,7 @@ func (lb *LoadBalancer) getRandomServer(servers []types.UpstreamServer) *types.U
 }
 
 // MarkServerDown 标记服务器为不可用
-func (lb *LoadBalancer) MarkServerDown(url string) {
+func (lb *LoadBalancer) MarkServerDown(url string, strict bool) {
 	lb.statusMutex.Lock()
 	defer lb.statusMutex.Unlock()
 
@@ -180,7 +180,8 @@ func (lb *LoadBalancer) MarkServerDown(url string) {
 	threshold := lb.serverThresholds[url]
 
 	// 检查是否达到失败阈值
-	if consecutiveFailures < threshold {
+	// 如果 strict 为 true，则忽略阈值直接标记失败
+	if !strict && consecutiveFailures < threshold {
 		logger.Warning("LOAD", "Server %s failed (%d/%d), not marking down yet", url, consecutiveFailures, threshold)
 		return
 	}

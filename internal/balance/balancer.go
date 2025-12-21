@@ -44,8 +44,9 @@ func (b *Balancer) GetNextServerWithFallback(useFallback bool) (*types.UpstreamS
 }
 
 // MarkServerDown 标记服务器为不可用
-func (b *Balancer) MarkServerDown(url string) {
-	b.selector.MarkServerDown(url)
+// strict: 如果为true，忽略阈值直接标记为失败；如果为false，遵循FailThreshold逻辑
+func (b *Balancer) MarkServerDown(url string, strict bool) {
+	b.selector.MarkServerDown(url, strict)
 }
 
 // GetAvailableServers 获取所有可用服务器

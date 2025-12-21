@@ -262,7 +262,7 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 	resp, err := client.Do(req)
 	if err != nil {
 		logger.Error("PROXY", "Request failed: %s | Error: %v", fullRequestURL, err)
-		balancer.MarkServerDown(server.URL)
+		balancer.MarkServerDown(server.URL, false)
 		return false
 	}
 	defer resp.Body.Close()
@@ -315,8 +315,8 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 		}
 	}
 
-	// 检查响应状态，如果是5xx错误或429速率限制，标记服务器为不可用
-	if resp.StatusCode >= 500 || resp.StatusCode == 429 {
+	// 检查响应状态，如果是5xx错误、429速率限制、400错误或403错误，标记服务器为不可用
+	if resp.StatusCode >= 500 || resp.StatusCode == 429 || resp.StatusCode == 400 || resp.StatusCode == 403 {
 		// 对于非流式响应，使用已读取的响应体
 		var errorDetail string
 		if !isStreaming {
@@ -341,7 +341,10 @@ func forwardRequest(c *gin.Context, server *types.UpstreamServer, balancer *bala
 		} else {
 			logger.Error("PROXY", "Server error: %s | Status: %d | Response: %s", fullRequestURL, resp.StatusCode, errorDetail)
 		}
-		balancer.MarkServerDown(server.URL)
+		
+		// 400, 403, 429 错误触发严格模式（立即标记失败），500 错误允许宽容（遵循阈值）
+		isStrict := resp.StatusCode == 429 || resp.StatusCode == 400 || resp.StatusCode == 403
+		balancer.MarkServerDown(server.URL, isStrict)
 		return false
 	}
 

@@ -10,7 +10,8 @@ type ServerSelector interface {
 	SelectServer() (*types.UpstreamServer, error)
 
 	// MarkServerDown 标记服务器为不可用
-	MarkServerDown(url string)
+	// strict: 如果为true，忽略阈值直接标记为失败；如果为false，遵循FailThreshold逻辑
+	MarkServerDown(url string, strict bool)
 
 	// MarkServerHealthy 标记服务器为健康
 	MarkServerHealthy(url string)

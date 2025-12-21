@@ -95,7 +95,7 @@ func TestLoadBalancerMarkServerDown(t *testing.T) {
 	lb := NewLoadBalancer(config)
 
 	// Mark server as down
-	lb.MarkServerDown(testutil.API1ExampleURL)
+	lb.MarkServerDown(testutil.API1ExampleURL, true)
 
 	// Check status
 	status := lb.GetServerStatus()
@@ -124,7 +124,7 @@ func TestLoadBalancerMarkServerHealthy(t *testing.T) {
 	lb := NewLoadBalancer(config)
 
 	// First mark it down
-	lb.MarkServerDown(testutil.API1ExampleURL)
+	lb.MarkServerDown(testutil.API1ExampleURL, true)
 
 	// Then mark it healthy
 	lb.MarkServerHealthy(testutil.API1ExampleURL)
@@ -160,7 +160,7 @@ func TestLoadBalancerGetAvailableServers(t *testing.T) {
 	}
 
 	// Mark one server as down
-	lb.MarkServerDown(testutil.API1ExampleURL)
+	lb.MarkServerDown(testutil.API1ExampleURL, true)
 
 	// Now should have 2 available servers
 	available = lb.GetAvailableServers()
@@ -188,7 +188,7 @@ func TestLoadBalancerRecoverServer(t *testing.T) {
 	lb := NewLoadBalancer(config)
 
 	// Mark server as down
-	lb.MarkServerDown(testutil.API1ExampleURL)
+	lb.MarkServerDown(testutil.API1ExampleURL, true)
 
 	// Verify it's down
 	status := lb.GetServerStatus()
@@ -217,7 +217,7 @@ func TestLoadBalancerNoAvailableServers(t *testing.T) {
 	lb := NewLoadBalancer(config)
 
 	// Mark all servers as down
-	lb.MarkServerDown(testutil.API1ExampleURL)
+	lb.MarkServerDown(testutil.API1ExampleURL, true)
 
 	// Should get error when trying to select server
 	server, err := lb.SelectServer()
@@ -285,7 +285,7 @@ func TestLoadBalancerConcurrency(t *testing.T) {
 					}
 				} else {
 					if id%2 == 0 {
-						lb.MarkServerDown(testutil.API1ExampleURL)
+						lb.MarkServerDown(testutil.API1ExampleURL, true)
 					} else {
 						lb.MarkServerHealthy(testutil.API1ExampleURL)
 					}

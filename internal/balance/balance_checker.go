@@ -41,7 +41,7 @@ type BalanceChecker struct {
 
 // BalancerInterface 负载均衡器接口（用于解耦）
 type BalancerInterface interface {
-	MarkServerDown(url string)
+	MarkServerDown(url string, strict bool)
 }
 
 // CommandExecutor 命令执行器接口
@@ -216,7 +216,7 @@ func (bc *BalanceChecker) checkServerBalance(server types.UpstreamServer) {
 				server.URL, balance, threshold)
 			// 标记服务器为不可用
 			if bc.balancer != nil {
-				bc.balancer.MarkServerDown(server.URL)
+				bc.balancer.MarkServerDown(server.URL, true)
 			}
 		} else {
 			logger.Success("MONEY", "Balance for %s: %.2f (checked in %dms)",
