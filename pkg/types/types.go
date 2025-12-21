@@ -38,8 +38,9 @@ type Config struct {
 	AuthKeys   []string         `json:"auth_keys"`  // 允许的 API Key 列表
 	Cooldown   int              `json:"cooldown"`   // 冷却时间（秒）
 	Debug      bool             `json:"debug"`      // 是否启用调试模式
-	MaxRetries int              `json:"max_retries"` // 最大重试次数，默认2
-	HTTPClient HTTPClientConfig `json:"http_client"` // HTTP客户端配置
+	MaxRetries         int              `json:"max_retries"`           // 最大重试次数，默认2
+	MaxRequestBodySize int64            `json:"max_request_body_size"` // 最大请求体大小（字节），默认32MB
+	HTTPClient         HTTPClientConfig `json:"http_client"`           // HTTP客户端配置
 }
 
 // Claude API 响应结构（用于解析 usage 信息）

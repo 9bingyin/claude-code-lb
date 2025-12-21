@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"claude-code-lb/internal/auth"
 	"claude-code-lb/internal/balance"
@@ -15,6 +20,11 @@ import (
 	"claude-code-lb/internal/stats"
 
 	"github.com/gin-gonic/gin"
+)
+
+const (
+	// ShutdownTimeout 优雅关闭超时时间
+	ShutdownTimeout = 30 * time.Second
 )
 
 var (
@@ -108,6 +118,12 @@ func main() {
 		port = "3000"
 	}
 
+	// 创建 HTTP 服务器
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: r,
+	}
+
 	log.Printf("%s==================== Claude Code Proxy ====================%s", logger.ColorBold, logger.ColorReset)
 	logger.Info("BOOT", "Version: %s (commit: %s, built: %s)", version, commit, date)
 	logger.Info("BOOT", "Starting server on port %s", port)
@@ -119,5 +135,36 @@ func main() {
 		logger.Info("BOOT", "  Allowed keys: %d", len(cfg.AuthKeys))
 	}
 	log.Printf("%s==========================================================%s", logger.ColorBold, logger.ColorReset)
-	log.Fatal(r.Run(":" + port))
+
+	// 在 goroutine 中启动服务器
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	}()
+
+	// 等待中断信号
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	sig := <-quit
+
+	logger.Info("SHUTDOWN", "Received signal: %v, initiating graceful shutdown...", sig)
+
+	// 创建超时上下文
+	ctx, cancel := context.WithTimeout(context.Background(), ShutdownTimeout)
+	defer cancel()
+
+	// 停止后台服务
+	logger.Info("SHUTDOWN", "Stopping background services...")
+	healthChecker.Stop()
+	statsReporter.Stop()
+	balanceChecker.Stop()
+
+	// 优雅关闭 HTTP 服务器
+	logger.Info("SHUTDOWN", "Shutting down HTTP server...")
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.Error("SHUTDOWN", "Server shutdown error: %v", err)
+	}
+
+	logger.Success("SHUTDOWN", "Server gracefully stopped")
 }

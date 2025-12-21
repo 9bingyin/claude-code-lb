@@ -151,22 +151,29 @@ func (c *sseUsageCollector) GetDebugContent() string {
 
 // ProxyHandler 代理处理器，封装所有依赖
 type ProxyHandler struct {
-	balancer      *balance.Balancer
-	statsReporter *stats.Reporter
-	debugMode     bool
-	maxRetries    int
-	httpClient    *http.Client
-	streamBufPool *sync.Pool
+	balancer           *balance.Balancer
+	statsReporter      *stats.Reporter
+	debugMode          bool
+	maxRetries         int
+	maxRequestBodySize int64
+	httpClient         *http.Client
+	streamBufPool      *sync.Pool
 }
 
 // NewProxyHandler 创建代理处理器
 func NewProxyHandler(balancer *balance.Balancer, statsReporter *stats.Reporter, config types.Config) *ProxyHandler {
+	maxBodySize := config.MaxRequestBodySize
+	if maxBodySize == 0 {
+		maxBodySize = types.DefaultMaxRequestBodySize
+	}
+
 	return &ProxyHandler{
-		balancer:      balancer,
-		statsReporter: statsReporter,
-		debugMode:     config.Debug,
-		maxRetries:    config.MaxRetries,
-		httpClient:    createHTTPClient(config.HTTPClient),
+		balancer:           balancer,
+		statsReporter:      statsReporter,
+		debugMode:          config.Debug,
+		maxRetries:         config.MaxRetries,
+		maxRequestBodySize: maxBodySize,
+		httpClient:         createHTTPClient(config.HTTPClient),
 		streamBufPool: &sync.Pool{
 			New: func() any {
 				buf := make([]byte, 4*1024) // 4KB 缓冲区
@@ -212,12 +219,26 @@ func (ph *ProxyHandler) Handler() gin.HandlerFunc {
 		startTime := time.Now()
 		ph.statsReporter.IncrementRequestCount()
 
-		// 预先读取请求体（支持重试）
+		// 预先读取请求体（支持重试），使用 MaxBytesReader 限制大小
 		var requestBody []byte
 		var err error
 		if c.Request.Body != nil {
+			// 使用 MaxBytesReader 限制请求体大小，防止 OOM 攻击
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, ph.maxRequestBodySize)
+
 			requestBody, err = io.ReadAll(c.Request.Body)
 			if err != nil {
+				// 检查是否是请求体过大错误
+				if err.Error() == "http: request body too large" {
+					logger.Warning("PROXY", "Request body too large (limit: %d bytes)", ph.maxRequestBodySize)
+					c.JSON(http.StatusRequestEntityTooLarge, gin.H{
+						"error": gin.H{
+							"type":    "request_too_large",
+							"message": fmt.Sprintf("Request body exceeds maximum allowed size of %d bytes", ph.maxRequestBodySize),
+						},
+					})
+					return
+				}
 				logger.Error("PROXY", "Failed to read request body: %v", err)
 				c.JSON(502, gin.H{"error": "Failed to read request body"})
 				return

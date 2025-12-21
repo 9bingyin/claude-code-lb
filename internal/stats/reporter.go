@@ -17,13 +17,23 @@ type Reporter struct {
 	requestCountByServer map[string]int64
 	responseTimeByServer map[string]int64
 	mutex                sync.Mutex
+	stopChan             chan struct{}
+	stopOnce             sync.Once
 }
 
 func New() *Reporter {
 	return &Reporter{
 		requestCountByServer: make(map[string]int64),
 		responseTimeByServer: make(map[string]int64),
+		stopChan:             make(chan struct{}),
 	}
+}
+
+// Stop 停止统计报告器
+func (r *Reporter) Stop() {
+	r.stopOnce.Do(func() {
+		close(r.stopChan)
+	})
 }
 
 func (r *Reporter) IncrementRequestCount() {
@@ -63,8 +73,16 @@ func (r *Reporter) StartReporter() {
 	ticker := time.NewTicker(5 * time.Minute) // 每5分钟显示一次统计
 	defer ticker.Stop()
 
-	for range ticker.C {
-		r.LogStats()
+	for {
+		select {
+		case <-ticker.C:
+			r.LogStats()
+		case <-r.stopChan:
+			// 停止前输出最终统计
+			r.LogStats()
+			logger.Info("STATS", "Stats reporter stopped")
+			return
+		}
 	}
 }
 

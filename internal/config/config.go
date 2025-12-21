@@ -93,6 +93,18 @@ func applyDefaults(config types.Config) types.Config {
 		config.MaxRetries = 2 // 默认重试2次
 	}
 
+	// 设置最大请求体大小默认值
+	if config.MaxRequestBodySize == 0 {
+		config.MaxRequestBodySize = types.DefaultMaxRequestBodySize
+	} else if config.MaxRequestBodySize > types.MaxAllowedRequestBodySize {
+		log.Printf("WARNING: max_request_body_size (%d) exceeds maximum allowed (%d), using maximum",
+			config.MaxRequestBodySize, types.MaxAllowedRequestBodySize)
+		config.MaxRequestBodySize = types.MaxAllowedRequestBodySize
+	} else if config.MaxRequestBodySize < 0 {
+		log.Printf("WARNING: max_request_body_size cannot be negative, using default")
+		config.MaxRequestBodySize = types.DefaultMaxRequestBodySize
+	}
+
 	// 应用HTTP客户端默认值
 	applyHTTPClientDefaults(&config)
 

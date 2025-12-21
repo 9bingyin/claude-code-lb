@@ -13,6 +13,14 @@ const (
 	AlgorithmRandom             = "random"
 )
 
+// 请求体大小限制常量
+const (
+	// DefaultMaxRequestBodySize 默认最大请求体大小 (32 MB，与 Claude API 一致)
+	DefaultMaxRequestBodySize = 32 * 1024 * 1024
+	// MaxAllowedRequestBodySize 最大允许设置的请求体大小 (128 MB)
+	MaxAllowedRequestBodySize = 128 * 1024 * 1024
+)
+
 // ValidModes 有效的模式列表
 var ValidModes = []string{ModeLoadBalance, ModeFallback}
 

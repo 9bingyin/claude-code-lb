@@ -3,6 +3,7 @@
   "mode": "fallback",
   "debug": false,
   "max_retries": 2,
+  "max_request_body_size": 33554432,
   "http_client": {
     "dial_timeout": 10,
     "keep_alive": 30,
