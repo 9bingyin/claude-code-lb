@@ -5,8 +5,9 @@ import "time"
 type UpstreamServer struct {
 	URL                  string    `json:"url"`
 	Weight               int       `json:"weight"`
-	Priority             int       `json:"priority"` // fallback模式下的优先级，数字越小优先级越高
+	Priority             int       `json:"priority"`       // fallback模式下的优先级，数字越小优先级越高
 	Token                string    `json:"token"`
+	FailThreshold        int       `json:"fail_threshold"` // 连续失败多少次才标记离线，默认1
 	BalanceCheck         string    `json:"balance_check"`          // 余额查询命令（可选）
 	BalanceCheckInterval int       `json:"balance_check_interval"` // 余额查询间隔（秒，可选）
 	BalanceThreshold     float64   `json:"balance_threshold"`      // 余额阈值，小于等于此值标记为不可用（可选，默认0）

@@ -7,6 +7,7 @@
       "url": "https://api.primary-server.com",
       "priority": 1,
       "token": "sk-primary-token-here",
+      "fail_threshold": 3,
       "balance_check": "curl -s -H 'Authorization: Bearer sk-primary-token-here' https://api.primary-server.com/balance",
       "balance_check_interval": 180,
       "balance_threshold": 10.0
@@ -15,6 +16,7 @@
       "url": "https://api.secondary-server.com",
       "priority": 2,
       "token": "sk-secondary-token-here",
+      "fail_threshold": 2,
       "balance_check": "curl -s -H 'Authorization: Bearer sk-secondary-token-here' https://api.secondary-server.com/v1/account/balance | jq -r '.balance'",
       "balance_check_interval": 600,
       "balance_threshold": 5.0

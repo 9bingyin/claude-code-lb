@@ -12,21 +12,25 @@ import (
 
 // FallbackSelector fallback选择器
 type FallbackSelector struct {
-	config          types.Config
-	serverStatus    map[string]bool
-	serverDownUntil map[string]time.Time // 服务器冷却时间
-	statusMutex     sync.RWMutex
-	failureCount    map[string]int64       // 服务器失败次数
-	orderedServers  []types.UpstreamServer // 按优先级排序的服务器列表
+	config              types.Config
+	serverStatus        map[string]bool
+	serverDownUntil     map[string]time.Time // 服务器冷却时间
+	statusMutex         sync.RWMutex
+	failureCount        map[string]int64       // 服务器失败次数（用于动态冷却）
+	consecutiveFailures map[string]int         // 连续失败次数（用于失败阈值判断）
+	serverThresholds    map[string]int         // 每个服务器的失败阈值
+	orderedServers      []types.UpstreamServer // 按优先级排序的服务器列表
 }
 
 // NewFallbackSelector 创建新的fallback选择器
 func NewFallbackSelector(config types.Config) *FallbackSelector {
 	fs := &FallbackSelector{
-		config:          config,
-		serverStatus:    make(map[string]bool),
-		serverDownUntil: make(map[string]time.Time),
-		failureCount:    make(map[string]int64),
+		config:              config,
+		serverStatus:        make(map[string]bool),
+		serverDownUntil:     make(map[string]time.Time),
+		failureCount:        make(map[string]int64),
+		consecutiveFailures: make(map[string]int),
+		serverThresholds:    make(map[string]int),
 	}
 
 	// 初始化服务器状态
@@ -34,6 +38,13 @@ func NewFallbackSelector(config types.Config) *FallbackSelector {
 		fs.serverStatus[server.URL] = true
 		fs.serverDownUntil[server.URL] = time.Time{}
 		fs.failureCount[server.URL] = 0
+		fs.consecutiveFailures[server.URL] = 0
+		// 设置失败阈值，默认为1（保持原有行为）
+		threshold := server.FailThreshold
+		if threshold <= 0 {
+			threshold = 1
+		}
+		fs.serverThresholds[server.URL] = threshold
 	}
 
 	// 对服务器按优先级排序
@@ -116,9 +127,20 @@ func (fs *FallbackSelector) MarkServerDown(url string) {
 	fs.statusMutex.Lock()
 	defer fs.statusMutex.Unlock()
 
+	// 增加连续失败计数
+	fs.consecutiveFailures[url]++
+	consecutiveFailures := fs.consecutiveFailures[url]
+	threshold := fs.serverThresholds[url]
+
+	// 检查是否达到失败阈值
+	if consecutiveFailures < threshold {
+		logger.Warning("LOAD", "Server %s failed (%d/%d), not marking down yet", url, consecutiveFailures, threshold)
+		return
+	}
+
 	fs.serverStatus[url] = false
 
-	// 增加失败计数
+	// 增加失败计数（用于动态冷却）
 	fs.failureCount[url]++
 	failures := fs.failureCount[url]
 
@@ -138,7 +160,10 @@ func (fs *FallbackSelector) MarkServerDown(url string) {
 	// 记录服务器冷却时间（统一管理，避免重复维护）
 	fs.serverDownUntil[url] = downUntil
 
-	logger.Warning("LOAD", "Server marked down: %s (priority order, failures: %d, cooldown: %v)", url, failures, cooldownDuration)
+	// 重置连续失败计数
+	fs.consecutiveFailures[url] = 0
+
+	logger.Warning("LOAD", "Server marked down: %s (threshold: %d, total failures: %d, cooldown: %v)", url, threshold, failures, cooldownDuration)
 }
 
 // GetAvailableServers 获取所有可用服务器（按优先级排序）
@@ -193,6 +218,11 @@ func (fs *FallbackSelector) RecoverServer(url string) {
 func (fs *FallbackSelector) MarkServerHealthy(url string) {
 	fs.statusMutex.Lock()
 	defer fs.statusMutex.Unlock()
+
+	// 重置连续失败计数
+	if fs.consecutiveFailures[url] > 0 {
+		fs.consecutiveFailures[url] = 0
+	}
 
 	// 重置失败计数
 	if fs.failureCount[url] > 0 {
