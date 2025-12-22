@@ -551,3 +551,240 @@ func TestHandlerSSEResponse(t *testing.T) {
 		t.Error("Expected response to contain message_delta event")
 	}
 }
+
+func TestCreateHTTPClient(t *testing.T) {
+	config := types.HTTPClientConfig{
+		DialTimeout:           10,
+		KeepAlive:             30,
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   20,
+		IdleConnTimeout:       120,
+		ResponseHeaderTimeout: 30,
+		TLSHandshakeTimeout:   10,
+		WriteBufferSize:       4096,
+		ReadBufferSize:        4096,
+	}
+
+	tests := []struct {
+		name     string
+		useHTTP2 bool
+	}{
+		{
+			name:     "HTTP/2 client",
+			useHTTP2: true,
+		},
+		{
+			name:     "HTTP/1.1 client",
+			useHTTP2: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := createHTTPClient(config, tt.useHTTP2)
+			if client == nil {
+				t.Error("createHTTPClient() returned nil")
+			}
+
+			// Verify the transport is properly configured
+			transport, ok := client.Transport.(*http.Transport)
+			if !ok {
+				t.Error("Expected Transport to be *http.Transport")
+				return
+			}
+
+			if transport.ForceAttemptHTTP2 != tt.useHTTP2 {
+				t.Errorf("ForceAttemptHTTP2 = %v, want %v", transport.ForceAttemptHTTP2, tt.useHTTP2)
+			}
+
+			if transport.DisableCompression != true {
+				t.Error("Expected DisableCompression to be true")
+			}
+		})
+	}
+}
+
+func TestNewProxyHandlerPreserveHTTPVersion(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name                string
+		preserveHTTPVersion bool
+		expectHTTP11Client  bool
+	}{
+		{
+			name:                "PreserveHTTPVersion enabled",
+			preserveHTTPVersion: true,
+			expectHTTP11Client:  true,
+		},
+		{
+			name:                "PreserveHTTPVersion disabled",
+			preserveHTTPVersion: false,
+			expectHTTP11Client:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := types.Config{
+				Mode:      "load_balance",
+				Algorithm: "round_robin",
+				Servers:   []types.UpstreamServer{},
+				HTTPClient: types.HTTPClientConfig{
+					PreserveHTTPVersion:   tt.preserveHTTPVersion,
+					DialTimeout:           10,
+					KeepAlive:             30,
+					MaxIdleConns:          100,
+					MaxIdleConnsPerHost:   20,
+					IdleConnTimeout:       120,
+					ResponseHeaderTimeout: 30,
+					TLSHandshakeTimeout:   10,
+				},
+			}
+
+			balancer := balance.New(config)
+			statsReporter := stats.New()
+
+			handler := NewProxyHandler(balancer, statsReporter, config)
+
+			if handler.httpClient == nil {
+				t.Error("httpClient should not be nil")
+			}
+
+			if handler.preserveHTTPVersion != tt.preserveHTTPVersion {
+				t.Errorf("preserveHTTPVersion = %v, want %v", handler.preserveHTTPVersion, tt.preserveHTTPVersion)
+			}
+
+			if tt.expectHTTP11Client {
+				if handler.http11Client == nil {
+					t.Error("http11Client should not be nil when PreserveHTTPVersion is enabled")
+				}
+
+				// Verify HTTP/1.1 client has ForceAttemptHTTP2 = false
+				transport, ok := handler.http11Client.Transport.(*http.Transport)
+				if !ok {
+					t.Error("Expected http11Client Transport to be *http.Transport")
+				} else if transport.ForceAttemptHTTP2 != false {
+					t.Error("http11Client should have ForceAttemptHTTP2 = false")
+				}
+			} else {
+				if handler.http11Client != nil {
+					t.Error("http11Client should be nil when PreserveHTTPVersion is disabled")
+				}
+			}
+		})
+	}
+}
+
+func TestHandlerPreserveHTTPVersion(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// Track which protocol was received by the upstream server
+	var receivedProto string
+
+	// Create a test upstream server
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedProto = r.Proto
+		response := types.ClaudeResponse{
+			Model: "claude-3-sonnet",
+			Usage: types.ClaudeUsage{
+				InputTokens:  100,
+				OutputTokens: 50,
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer upstream.Close()
+
+	tests := []struct {
+		name                string
+		preserveHTTPVersion bool
+		clientProto         string
+		clientProtoMajor    int
+		clientProtoMinor    int
+	}{
+		{
+			name:                "HTTP/1.1 client with preserve enabled",
+			preserveHTTPVersion: true,
+			clientProto:         "HTTP/1.1",
+			clientProtoMajor:    1,
+			clientProtoMinor:    1,
+		},
+		{
+			name:                "HTTP/1.0 client with preserve enabled",
+			preserveHTTPVersion: true,
+			clientProto:         "HTTP/1.0",
+			clientProtoMajor:    1,
+			clientProtoMinor:    0,
+		},
+		{
+			name:                "HTTP/2.0 client with preserve enabled",
+			preserveHTTPVersion: true,
+			clientProto:         "HTTP/2.0",
+			clientProtoMajor:    2,
+			clientProtoMinor:    0,
+		},
+		{
+			name:                "HTTP/1.1 client with preserve disabled",
+			preserveHTTPVersion: false,
+			clientProto:         "HTTP/1.1",
+			clientProtoMajor:    1,
+			clientProtoMinor:    1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			receivedProto = "" // Reset
+
+			config := types.Config{
+				Mode:      "load_balance",
+				Algorithm: "round_robin",
+				Servers: []types.UpstreamServer{
+					{URL: upstream.URL, Token: "test-token"},
+				},
+				HTTPClient: types.HTTPClientConfig{
+					PreserveHTTPVersion:   tt.preserveHTTPVersion,
+					DialTimeout:           10,
+					KeepAlive:             30,
+					MaxIdleConns:          100,
+					MaxIdleConnsPerHost:   20,
+					IdleConnTimeout:       120,
+					ResponseHeaderTimeout: 30,
+					TLSHandshakeTimeout:   10,
+				},
+			}
+
+			balancer := balance.New(config)
+			statsReporter := stats.New()
+
+			ph := NewProxyHandler(balancer, statsReporter, config)
+			handler := ph.Handler()
+
+			router := gin.New()
+			router.Any("/*path", handler)
+
+			req, _ := http.NewRequest("POST", "/v1/messages", bytes.NewBufferString(`{"test": "data"}`))
+			req.Header.Set("Content-Type", "application/json")
+			// Set the client protocol version
+			req.Proto = tt.clientProto
+			req.ProtoMajor = tt.clientProtoMajor
+			req.ProtoMinor = tt.clientProtoMinor
+
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			if w.Code != 200 {
+				t.Errorf("Expected status 200, got %d", w.Code)
+			}
+
+			// The upstream server (httptest) only supports HTTP/1.1
+			// so we just verify the request was processed successfully
+			if receivedProto == "" {
+				t.Error("Upstream server did not receive any request")
+			}
+		})
+	}
+}

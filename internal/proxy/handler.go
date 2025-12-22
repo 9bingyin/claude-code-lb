@@ -151,13 +151,15 @@ func (c *sseUsageCollector) GetDebugContent() string {
 
 // ProxyHandler 代理处理器，封装所有依赖
 type ProxyHandler struct {
-	balancer           *balance.Balancer
-	statsReporter      *stats.Reporter
-	debugMode          bool
-	maxRetries         int
-	maxRequestBodySize int64
-	httpClient         *http.Client
-	streamBufPool      *sync.Pool
+	balancer            *balance.Balancer
+	statsReporter       *stats.Reporter
+	debugMode           bool
+	maxRetries          int
+	maxRequestBodySize  int64
+	httpClient          *http.Client // 默认客户端（HTTP/2）
+	http11Client        *http.Client // HTTP/1.1 客户端
+	preserveHTTPVersion bool         // 是否保持客户端HTTP协议版本
+	streamBufPool       *sync.Pool
 }
 
 // NewProxyHandler 创建代理处理器
@@ -167,13 +169,14 @@ func NewProxyHandler(balancer *balance.Balancer, statsReporter *stats.Reporter, 
 		maxBodySize = types.DefaultMaxRequestBodySize
 	}
 
-	return &ProxyHandler{
-		balancer:           balancer,
-		statsReporter:      statsReporter,
-		debugMode:          config.Debug,
-		maxRetries:         config.MaxRetries,
-		maxRequestBodySize: maxBodySize,
-		httpClient:         createHTTPClient(config.HTTPClient),
+	ph := &ProxyHandler{
+		balancer:            balancer,
+		statsReporter:       statsReporter,
+		debugMode:           config.Debug,
+		maxRetries:          config.MaxRetries,
+		maxRequestBodySize:  maxBodySize,
+		httpClient:          createHTTPClient(config.HTTPClient, true),  // HTTP/2 客户端
+		preserveHTTPVersion: config.HTTPClient.PreserveHTTPVersion,
 		streamBufPool: &sync.Pool{
 			New: func() any {
 				buf := make([]byte, 4*1024) // 4KB 缓冲区
@@ -181,10 +184,18 @@ func NewProxyHandler(balancer *balance.Balancer, statsReporter *stats.Reporter, 
 			},
 		},
 	}
+
+	// 如果启用了保持HTTP版本功能，创建HTTP/1.1专用客户端
+	if config.HTTPClient.PreserveHTTPVersion {
+		ph.http11Client = createHTTPClient(config.HTTPClient, false) // HTTP/1.1 客户端
+	}
+
+	return ph
 }
 
 // createHTTPClient 根据配置创建HTTP客户端
-func createHTTPClient(config types.HTTPClientConfig) *http.Client {
+// useHTTP2 参数控制是否使用 HTTP/2 协议
+func createHTTPClient(config types.HTTPClientConfig, useHTTP2 bool) *http.Client {
 	return &http.Client{
 		// 不设置整体超时，让流式响应可以持续任意时长
 		// 超时由 Transport 层的各项配置分别控制
@@ -201,8 +212,8 @@ func createHTTPClient(config types.HTTPClientConfig) *http.Client {
 			MaxConnsPerHost:     0, // 不限制每个 host 的最大连接数
 			IdleConnTimeout:     time.Duration(config.IdleConnTimeout) * time.Second,
 			// 流式响应优化
-			DisableCompression:    true, // 禁用压缩，避免缓冲延迟
-			ForceAttemptHTTP2:     true, // 使用 HTTP/2 多路复用
+			DisableCompression:    true,     // 禁用压缩，避免缓冲延迟
+			ForceAttemptHTTP2:     useHTTP2, // 根据参数决定是否使用 HTTP/2
 			WriteBufferSize:       config.WriteBufferSize,
 			ReadBufferSize:        config.ReadBufferSize,
 			ResponseHeaderTimeout: time.Duration(config.ResponseHeaderTimeout) * time.Second,
@@ -293,9 +304,9 @@ func (ph *ProxyHandler) forwardRequestWithBody(c *gin.Context, server *types.Ups
 	target = strings.Replace(target, "http:/", "http://", 1)
 	target = strings.Replace(target, "https:/", "https://", 1)
 
-	// 请求日志 - 显示完整URL
+	// 请求日志 - 显示完整URL和协议版本
 	fullRequestURL := formatRequestURL(c.Request.Method, server.URL, c.Request.URL.Path, c.Request.URL.RawQuery)
-	logger.Info("PROXY", "%s", fullRequestURL)
+	logger.Info("PROXY", "%s [%s]", fullRequestURL, c.Request.Proto)
 
 	// 使用 NewRequestWithContext 传递上下文（修复上下文传递问题）
 	req, err := http.NewRequestWithContext(c.Request.Context(), c.Request.Method, target, bytes.NewReader(requestBody))
@@ -317,9 +328,10 @@ func (ph *ProxyHandler) forwardRequestWithBody(c *gin.Context, server *types.Ups
 	// Debug 模式下记录请求详细信息
 	if ph.debugMode {
 		// 请求概览信息
-		requestOverview := fmt.Sprintf("Method: %s\nURL: %s\nContent-Type: %s\nContent-Length: %d bytes\nClient IP: %s",
+		requestOverview := fmt.Sprintf("Method: %s\nURL: %s\nProtocol: %s\nContent-Type: %s\nContent-Length: %d bytes\nClient IP: %s",
 			c.Request.Method,
 			fullRequestURL,
+			c.Request.Proto,
 			c.Request.Header.Get("Content-Type"),
 			len(requestBody),
 			c.ClientIP(),
@@ -348,8 +360,17 @@ func (ph *ProxyHandler) forwardRequestWithBody(c *gin.Context, server *types.Ups
 		}
 	}
 
-	// 发送请求（使用配置的 HTTP 客户端）
-	resp, err := ph.httpClient.Do(req)
+	// 根据配置和客户端HTTP版本选择对应的HTTP客户端
+	client := ph.httpClient
+	if ph.preserveHTTPVersion && c.Request.ProtoMajor == 1 && ph.http11Client != nil {
+		client = ph.http11Client
+		if ph.debugMode {
+			logger.Debug("PROXY", "Using HTTP/1.1 client (client protocol: %s)", c.Request.Proto)
+		}
+	}
+
+	// 发送请求
+	resp, err := client.Do(req)
 	if err != nil {
 		logger.Error("PROXY", "Request failed: %s | Error: %v", fullRequestURL, err)
 		ph.balancer.MarkServerDown(server.URL, false)

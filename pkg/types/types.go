@@ -4,15 +4,16 @@ import "time"
 
 // HTTPClientConfig HTTP客户端配置
 type HTTPClientConfig struct {
-	DialTimeout           int `json:"dial_timeout"`             // 连接超时（秒），默认10
-	KeepAlive             int `json:"keep_alive"`               // TCP keep-alive间隔（秒），默认30
-	MaxIdleConns          int `json:"max_idle_conns"`           // 最大空闲连接数，默认100
-	MaxIdleConnsPerHost   int `json:"max_idle_conns_per_host"`  // 每个host最大空闲连接数，默认20
-	IdleConnTimeout       int `json:"idle_conn_timeout"`        // 空闲连接超时（秒），默认120
-	ResponseHeaderTimeout int `json:"response_header_timeout"`  // 响应头超时（秒），默认30
-	TLSHandshakeTimeout   int `json:"tls_handshake_timeout"`    // TLS握手超时（秒），默认10
-	WriteBufferSize       int `json:"write_buffer_size"`        // 写缓冲区大小（字节），默认4096
-	ReadBufferSize        int `json:"read_buffer_size"`         // 读缓冲区大小（字节），默认4096
+	DialTimeout           int  `json:"dial_timeout"`              // 连接超时（秒），默认10
+	KeepAlive             int  `json:"keep_alive"`                // TCP keep-alive间隔（秒），默认30
+	MaxIdleConns          int  `json:"max_idle_conns"`            // 最大空闲连接数，默认100
+	MaxIdleConnsPerHost   int  `json:"max_idle_conns_per_host"`   // 每个host最大空闲连接数，默认20
+	IdleConnTimeout       int  `json:"idle_conn_timeout"`         // 空闲连接超时（秒），默认120
+	ResponseHeaderTimeout int  `json:"response_header_timeout"`   // 响应头超时（秒），默认30
+	TLSHandshakeTimeout   int  `json:"tls_handshake_timeout"`     // TLS握手超时（秒），默认10
+	WriteBufferSize       int  `json:"write_buffer_size"`         // 写缓冲区大小（字节），默认4096
+	ReadBufferSize        int  `json:"read_buffer_size"`          // 读缓冲区大小（字节），默认4096
+	PreserveHTTPVersion   bool `json:"preserve_http_version"`     // 保持客户端HTTP协议版本，默认false
 }
 
 type UpstreamServer struct {
